@@ -1,0 +1,17 @@
+[package]
+name = "talc"
+version = "0.1.0"
+edition = "2021"
+authors = ["Jacob Garm <jacobgarm@hotmail.dk>"]
+description = "A computer algebra system written in Rust"
+license = "MIT"
+keywords = ["math"]
+
+[dependencies]
+bimap = "0.6.3"
+itertools = "0.13.0"
+lazy-regex = "3.3.0"
+malachite = { version = "0.4.16", features = ["floats", "malachite-float"] }
+malachite-float = "0.4.16"
+rustyline = "14.0.0"
+strum = { version = "0.26.3", features = ["derive"] }
