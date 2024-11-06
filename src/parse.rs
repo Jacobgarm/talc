@@ -7,12 +7,18 @@ use operators::{infix_from_char, Infix};
 
 use crate::ast::*;
 
+pub fn is_valid_identifier(s: &str) -> bool {
+    regex_is_match!(r"^\p{L}[\p{L}0-9_]*$", s)
+}
+
 pub fn preparse(mut subject: String) -> String {
     // Replacement symbols
     let symbols = [
-        ("<=", "≤"),
-        (">=", "≥"),
         ("!=", "≠"),
+        ("<=>", "⇔"),
+        ("=>", "⇒"),
+        (">=", "≥"),
+        ("<=", "≤"),
         ("~", "≈"),
         (" ", ""),
         ("\t", ""),
@@ -263,17 +269,6 @@ pub fn parse_procedure(name: &str, args_string: &str, start: usize) -> ParseResu
         });
     };
 
-    let args = match kind {
-        ProcedureKind::Matrix => args
-            .into_iter()
-            .map(|row| Exp::Procedure {
-                kind: ProcedureKind::RowVector,
-                args: row,
-            })
-            .collect_vec(),
-        _ => args.into_iter().flatten().collect_vec(),
-    };
-
     Ok(Exp::Procedure { kind, args })
 }
 
@@ -328,7 +323,9 @@ fn parse_bounded(subject: &str, start: usize) -> ParseResult<Exp> {
 
         let mut exp = parse_bounded(first_term, indices_iter.next().unwrap())?;
 
-        for ((term, index), (op_char, infix)) in terms_iter.zip(indices_iter).zip(ops) {
+        let mut exp_is_first = true;
+
+        for ((term, index), (op_char, infix)) in terms_iter.zip_eq(indices_iter).zip_eq(ops) {
             let mut parsed = parse_bounded(term, index)?;
 
             match op_char {
@@ -357,8 +354,16 @@ fn parse_bounded(subject: &str, start: usize) -> ParseResult<Exp> {
                     right: right.into(),
                 },
                 Infix::Assoc(op) => Exp::assoc_combine(op, left, right),
-                Infix::Relation(rel) => Exp::chain_combine(rel, left, right),
+                Infix::Relation(rel) => Exp::chain_combine(
+                    rel,
+                    left,
+                    right,
+                    assoc.is_left() && !exp_is_first,
+                    assoc.is_right() && !exp_is_first,
+                ),
             };
+
+            exp_is_first = false;
         }
 
         return Ok(exp);
@@ -410,15 +415,19 @@ fn parse_bounded(subject: &str, start: usize) -> ParseResult<Exp> {
     }
 
     // Ignore Unary add
-    if let Some(sub) = subject.strip_prefix("+") {
+    if let Some(sub) = subject.strip_prefix("+")
+        && !sub.is_empty()
+    {
         return parse(sub);
     }
 
     // Unary minus parsed as multiplication
-    if let Some(sub) = subject.strip_prefix("-") {
+    if let Some(sub) = subject.strip_prefix("-")
+        && !sub.is_empty()
+    {
         let parsed = parse(sub)?;
         return Ok(Exp::assoc_combine(
-            operators::AssocOp::Add,
+            operators::AssocOp::Mul,
             Exp::NEGATIVE_ONE,
             parsed,
         ));
@@ -427,7 +436,9 @@ fn parse_bounded(subject: &str, start: usize) -> ParseResult<Exp> {
     // Unary operators
     for op in UnaryOp::ALL {
         let (pre, post) = op.symbols();
-        if let Some(sub) = subject.strip_prefix(pre).and_then(|s| s.strip_suffix(post)) {
+        if let Some(sub) = subject.strip_prefix(pre).and_then(|s| s.strip_suffix(post))
+            && !sub.is_empty()
+        {
             let parsed = parse_bounded(sub, start + pre.len())?;
             return Ok(Exp::Unary {
                 op,

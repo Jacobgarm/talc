@@ -1,4 +1,4 @@
-use std::{cell::LazyCell, collections::HashMap, sync::LazyLock};
+use std::{cell::LazyCell, collections::HashMap};
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
 pub enum UnaryOp {
@@ -33,12 +33,27 @@ impl UnaryOp {
             Not => ("¬", ""),
         }
     }
+
+    pub fn is_wrapping(&self) -> bool {
+        let (pre, post) = self.symbols();
+        !pre.is_empty() && !post.is_empty()
+    }
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
 pub enum Associativity {
     Left,
     Right,
+}
+
+impl Associativity {
+    pub fn is_left(self) -> bool {
+        self == Self::Left
+    }
+
+    pub fn is_right(self) -> bool {
+        self == Self::Right
+    }
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
@@ -66,6 +81,7 @@ impl Infix {
     }
 
     pub fn precedence_associativity(prec: u8) -> Associativity {
+        #![allow(clippy::manual_range_patterns)]
         match prec {
             0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 => Associativity::Left,
             10 => Associativity::Right,
@@ -107,7 +123,7 @@ impl DyadicOp {
         Self::COMMUTATIVES.contains(&self)
     }
 
-    fn precedence(self) -> u8 {
+    pub fn precedence(self) -> u8 {
         use DyadicOp::*;
         match self {
             LogicImplies | LogicEquiv => 0,
@@ -177,7 +193,7 @@ impl AssocOp {
         }
     }
 
-    fn precedence(self) -> u8 {
+    pub fn precedence(self) -> u8 {
         use AssocOp::*;
         match self {
             LogicOr => 1,
@@ -243,7 +259,7 @@ impl Relation {
         }
     }
 
-    fn precedence(self) -> u8 {
+    pub fn precedence(self) -> u8 {
         use Relation::*;
         match self {
             Eq | Neq | Leq | Geq | Gt | Lt | Approx | Elem | Subset | SubsetEq | Superset

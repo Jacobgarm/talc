@@ -6,37 +6,39 @@ pub struct Matrix {
 }
 
 impl Matrix {
-    pub fn from_rows(rows: Vec<Vec<Exp>>) -> Result<Self, ()> {
+    pub fn try_from_rows(rows: Vec<Vec<Exp>>) -> Option<Self> {
         if let Some(first) = rows.first() {
             let num_cols = first.len();
             for row in rows.iter().skip(1) {
                 if row.len() != num_cols {
-                    return Err(());
+                    return None;
                 }
             }
         }
-        Ok(Self { rows })
+        Some(Self { rows })
     }
 
-    pub fn from_cols(mut cols: Vec<Vec<Exp>>) -> Result<Self, ()> {
+    pub fn try_from_cols(mut cols: Vec<Vec<Exp>>) -> Option<Self> {
         let num_rows = if let Some(first) = cols.first() {
             first.len()
         } else {
-            return Ok(Self { rows: cols });
+            return Some(Self { rows: cols });
         };
         let mut rows = Vec::new();
-        for i in 0..num_rows {
+        for _ in 0..num_rows {
             let mut row = Vec::new();
             for col in cols.iter_mut() {
-                let Some(entry) = col.pop() else {
-                    return Err(());
-                };
+                let entry = col.pop()?;
                 row.push(entry);
             }
             rows.insert(0, row);
         }
 
-        Ok(Self { rows })
+        Some(Self { rows })
+    }
+
+    pub fn rows(&self) -> &Vec<Vec<Exp>> {
+        &self.rows
     }
 
     pub fn height(&self) -> usize {

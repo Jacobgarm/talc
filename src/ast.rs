@@ -24,6 +24,15 @@ impl Numeric {
     const ZERO_INT: Self = Self::Integer(Integer::ZERO);
     const ONE_INT: Self = Self::Integer(Integer::ONE);
     const NEGATIVE_ONE_INT: Self = Self::Integer(Integer::NEGATIVE_ONE);
+
+    pub fn is_negative(&self) -> bool {
+        match self {
+            Self::Integer(int) => *int < 0,
+            Self::Rational(rat) => *rat < 0,
+            Self::Small(float) => float.0.is_sign_negative(),
+            Self::Big(float) => float.is_sign_negative(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -59,7 +68,7 @@ pub enum Exp {
     },
     Procedure {
         kind: ProcedureKind,
-        args: Vec<Exp>,
+        args: Vec<Vec<Exp>>,
     },
     Matrix(linalg::Matrix),
 }
@@ -68,6 +77,20 @@ impl Exp {
     pub const ZERO: Self = Self::Number(Numeric::ZERO_INT);
     pub const ONE: Self = Self::Number(Numeric::ONE_INT);
     pub const NEGATIVE_ONE: Self = Self::Number(Numeric::NEGATIVE_ONE_INT);
+
+    pub fn is_atomic(&self) -> bool {
+        use Exp::*;
+        match self {
+            Number(..) | Bool(..) | ImagUnit | Inf | Var { .. } => true,
+            Unary { .. }
+            | Dyadic { .. }
+            | Pool { .. }
+            | RelationChain { .. }
+            | Function { .. }
+            | Procedure { .. }
+            | Matrix { .. } => false,
+        }
+    }
 
     pub fn assoc_combine(op: AssocOp, first: Self, second: Self) -> Self {
         let mut terms = Vec::new();
@@ -91,14 +114,20 @@ impl Exp {
         Self::Pool { op, terms }
     }
 
-    pub fn chain_combine(rel: Relation, first: Self, second: Self) -> Self {
+    pub fn chain_combine(
+        rel: Relation,
+        first: Self,
+        second: Self,
+        open_first: bool,
+        open_second: bool,
+    ) -> Self {
         let mut terms = Vec::new();
         let mut rels = Vec::new();
         match first {
             Self::RelationChain {
                 rels: mut first_rels,
                 terms: mut first_terms,
-            } => {
+            } if open_first => {
                 terms.append(&mut first_terms);
                 rels.append(&mut first_rels);
             }
@@ -110,7 +139,7 @@ impl Exp {
             Self::RelationChain {
                 rels: mut second_rels,
                 terms: mut second_terms,
-            } => {
+            } if open_second => {
                 terms.append(&mut second_terms);
                 rels.append(&mut second_rels);
             }
