@@ -1,7 +1,3 @@
-use malachite::num::basic::traits::{NegativeOne, One, Zero};
-use malachite::num::float::NiceFloat;
-use malachite::{Integer, Rational};
-use malachite_float::ComparableFloat;
 use std::rc::Rc;
 
 use crate::linalg;
@@ -12,28 +8,8 @@ pub use operators::*;
 pub mod procedures;
 pub use procedures::*;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Numeric {
-    Integer(Integer),
-    Rational(Rational),
-    Small(NiceFloat<f64>),
-    Big(ComparableFloat),
-}
-
-impl Numeric {
-    const ZERO_INT: Self = Self::Integer(Integer::ZERO);
-    const ONE_INT: Self = Self::Integer(Integer::ONE);
-    const NEGATIVE_ONE_INT: Self = Self::Integer(Integer::NEGATIVE_ONE);
-
-    pub fn is_negative(&self) -> bool {
-        match self {
-            Self::Integer(int) => *int < 0,
-            Self::Rational(rat) => *rat < 0,
-            Self::Small(float) => float.0.is_sign_negative(),
-            Self::Big(float) => float.is_sign_negative(),
-        }
-    }
-}
+pub mod numeric;
+pub use numeric::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Exp {
@@ -147,5 +123,11 @@ impl Exp {
         }
 
         Self::RelationChain { rels, terms }
+    }
+}
+
+impl From<Numeric> for Exp {
+    fn from(value: Numeric) -> Self {
+        Self::Number(value)
     }
 }

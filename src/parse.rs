@@ -2,7 +2,10 @@ use std::{char, cmp::Ordering, collections::HashMap, fmt::Display, str::FromStr}
 
 use itertools::Itertools;
 use lazy_regex::{regex_captures, regex_is_match, regex_replace_all};
-use malachite::{num::float::NiceFloat, Integer};
+use malachite::{
+    num::{conversion::traits::FromSciString, float::NiceFloat},
+    Integer, Rational,
+};
 use operators::{infix_from_char, Infix};
 
 use crate::ast::*;
@@ -393,18 +396,13 @@ fn parse_bounded(subject: &str, start: usize) -> ParseResult<Exp> {
     // Integers
     if regex_is_match!(r"^-?[0-9]+$", subject) {
         let int = Integer::from_str(subject).expect("failed parsing integer");
-        return Ok(Exp::Number(Numeric::Integer(int)));
+        return Ok(Numeric::Integer(int).into());
     }
 
     // Real numbers
-    if regex_is_match!(r"^-?[0-9]+\.[0-9]$", subject) {
-        let float = NiceFloat::from_str(subject).expect("failed parsing float");
-        return Ok(Exp::Number(Numeric::Small(float)));
-
-        // TODO reimplement when string -> float is added
-        //let float =
-        //    ComparableFloat(Float::from_string_base(10, subject).expect("Failed parsing float"));
-        //return Ok(Exp::Number(Numeric::Big(float)));
+    if regex_is_match!(r"^-?[0-9]+\.[0-9]+$", subject) {
+        let rat = Rational::from_sci_string(subject).expect("failed real number parsing");
+        return Ok(Numeric::Rational(rat).into());
     }
 
     //Variables

@@ -1,6 +1,6 @@
 use ast::ProcedureKind;
 use context::Context;
-use display::pretty_print;
+use display::PrintOptions;
 use itertools::Itertools;
 use lazy_regex::regex_captures;
 use parse::{is_valid_identifier, parse, preparse};
@@ -11,6 +11,7 @@ use talc::*;
 pub struct REPLContext {
     debug_mode: bool,
     pretty_printing: bool,
+    decimal_rationals: Option<bool>,
 }
 
 impl Default for REPLContext {
@@ -18,6 +19,7 @@ impl Default for REPLContext {
         Self {
             debug_mode: true,
             pretty_printing: true,
+            decimal_rationals: None,
         }
     }
 }
@@ -95,7 +97,7 @@ pub fn repl(mut eval_context: Context) {
                 println!("Defined variable {front}");
             }
         } else {
-            let preparsed = parse::preparse(line);
+            let preparsed = parse::preparse(line.clone());
             if repl_context.debug_mode {
                 println!("Preparsed: {preparsed}");
             }
@@ -107,9 +109,16 @@ pub fn repl(mut eval_context: Context) {
                     continue;
                 }
             };
+
+            let print_options = PrintOptions {
+                decimal_rationals: repl_context
+                    .decimal_rationals
+                    .unwrap_or_else(|| line.contains('.')),
+            };
+
             if repl_context.debug_mode {
                 println!("AST: {parsed:?}");
-                println!("Displays: {parsed}");
+                println!("Displays: {}", parsed.to_string_opts(print_options));
             }
 
             let eval_result = parsed.eval(&eval_context);
@@ -122,11 +131,13 @@ pub fn repl(mut eval_context: Context) {
                 }
             };
 
-            if repl_context.pretty_printing {
-                println!("{evaluated}");
+            let s = if repl_context.pretty_printing {
+                evaluated.to_pretty_string_opts(print_options)
             } else {
-                pretty_print(&evaluated);
-            }
+                evaluated.to_string_opts(print_options)
+            };
+
+            println!("{s}");
         }
     }
 }

@@ -53,3 +53,12 @@ impl Matrix {
         (self.height(), self.width())
     }
 }
+
+//impl std::ops::Add for Matrix {
+//    type Output = Self;
+//
+//    fn add(mut self, rhs: Self) -> Self::Output {
+//        for (row1, row2) in self.rows().iter_mut().zip(rhs.rows().into_iter()) {}
+//        self
+//    }
+//}
