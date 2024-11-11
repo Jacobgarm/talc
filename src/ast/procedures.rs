@@ -59,6 +59,9 @@ pub enum ProcedureKind {
     #[strum(serialize = "diag")]
     DiagonalMatrix,
 
+    #[strum(serialize = "id_matrix")]
+    IdentityMatrix,
+
     #[strum(serialize = "grad")]
     Gradient,
 
@@ -67,6 +70,9 @@ pub enum ProcedureKind {
 
     #[strum(serialize = "jacobian")]
     Jacobian,
+
+    #[strum(serialize = "eval_default")]
+    EvalDefaultContext,
 }
 
 impl ProcedureKind {
@@ -104,10 +110,17 @@ impl ProcedureKind {
                 &["..."],
             ],
             DiagonalMatrix => &[&["entry_1", "..."]],
+            IdentityMatrix => &[&["size"]],
             Gradient => &[&["exp", "[eval_point"]],
             Hessian => &[&["exp", "[eval_point"]],
             Jacobian => &[&["exp", "[eval_point"]],
+            EvalDefaultContext => &[&["exp"]],
         }
+    }
+
+    pub fn eagerly_eval_args(self) -> bool {
+        use ProcedureKind::*;
+        matches!(self, ColumnVector | RowVector | Matrix | DiagonalMatrix)
     }
 
     pub fn signature_string(self) -> String {

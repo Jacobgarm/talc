@@ -1,6 +1,7 @@
 use itertools::Itertools;
 use malachite::num::float::NiceFloat;
 use malachite::Float;
+use std::cell::RefCell;
 use std::collections::HashMap;
 
 use crate::ast::{Exp, Numeric};
@@ -24,7 +25,7 @@ pub struct FunctionInfo {
 
 #[derive(Debug, Clone)]
 pub struct VarInfo {
-    exp: Exp,
+    pub exp: Exp,
     approximator: Option<fn(u32) -> Float>,
 }
 
@@ -42,6 +43,18 @@ pub struct Context {
     variables: HashMap<String, VarInfo>,
     functions: HashMap<String, FunctionInfo>,
     relations: HashMap<(Exp, Relation), Exp>,
+    foil_level: FoilLevel,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FoilLevel {
+    Always,
+    SingleAlgebraic,
+    Never,
+}
+
+thread_local! {
+    pub static DEFAULT_CONTEXT: RefCell<Context> = RefCell::new(Context::default());
 }
 
 impl Context {
@@ -50,12 +63,17 @@ impl Context {
             variables: HashMap::new(),
             functions: HashMap::new(),
             relations: HashMap::new(),
+            foil_level: FoilLevel::SingleAlgebraic,
         }
     }
 
     pub fn set_var(&mut self, name: String, exp: Exp) {
         let var_info = VarInfo::from_exp(exp);
         self.variables.insert(name, var_info);
+    }
+
+    pub fn get_var(&self, name: &str) -> Option<&VarInfo> {
+        self.variables.get(name)
     }
 
     pub fn set_function(&mut self, name: String, params: Vec<String>, exp: Exp) {
@@ -126,9 +144,15 @@ impl Default for Context {
 
         let mut functions = HashMap::from([]);
         for (name, params, exp_str) in simple_functions {
+            let exp = parse(exp_str).expect("parsing error in default function");
+            let exp = Exp::Procedure {
+                kind: crate::ast::ProcedureKind::EvalDefaultContext,
+                args: vec![vec![exp]],
+            };
+
             let func_info = FunctionInfo {
                 params: params.iter().map(|p| (*p).to_owned()).collect_vec(),
-                exp: Some(parse(exp_str).unwrap()),
+                exp: Some(exp),
                 ..Default::default()
             };
             functions.insert(name.to_owned(), func_info);
@@ -143,6 +167,7 @@ impl Default for Context {
             variables,
             functions,
             relations,
+            foil_level: FoilLevel::SingleAlgebraic,
         }
     }
 }

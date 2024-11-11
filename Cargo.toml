@@ -13,5 +13,6 @@ itertools = "0.13.0"
 lazy-regex = "3.3.0"
 malachite = { version = "0.4.16", features = ["floats", "malachite-float"] }
 malachite-float = "0.4.16"
+ordered_hash_map = "0.4.0"
 rustyline = "14.0.0"
 strum = { version = "0.26.3", features = ["derive"] }

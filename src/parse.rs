@@ -2,10 +2,7 @@ use std::{char, cmp::Ordering, collections::HashMap, fmt::Display, str::FromStr}
 
 use itertools::Itertools;
 use lazy_regex::{regex_captures, regex_is_match, regex_replace_all};
-use malachite::{
-    num::{conversion::traits::FromSciString, float::NiceFloat},
-    Integer, Rational,
-};
+use malachite::{num::conversion::traits::FromSciString, Integer, Rational};
 use operators::{infix_from_char, Infix};
 
 use crate::ast::*;

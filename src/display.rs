@@ -2,7 +2,7 @@ use itertools::Itertools;
 use malachite::{num::arithmetic::traits::IsPowerOf2, Natural};
 use std::{borrow::Borrow, fmt::Display};
 
-use crate::ast::{AssocOp, DyadicOp, Exp, Numeric};
+use crate::ast::{AssocOp, DyadicOp, Exp, Numeric, ProcedureKind};
 
 #[derive(Debug, Clone, Copy)]
 pub struct PrintOptions {
@@ -243,8 +243,26 @@ impl Exp {
                 format!("{name}[{args_str}]")
             }
             Matrix(mat) => {
-                let entries_str = join_nested(mat.rows(), opts);
-                format!("mat[{entries_str}]")
+                if mat.width() == 1 && mat.height() > 1 {
+                    let entries_str = mat
+                        .rows_ref()
+                        .iter()
+                        .map(|row| row[0].to_string_opts(opts))
+                        .join(", ");
+                    let name = ProcedureKind::ColumnVector.to_string();
+                    format!("{name}[{entries_str}]")
+                } else if mat.height() == 1 && mat.width() > 1 {
+                    let entries_str = mat.rows_ref()[0]
+                        .iter()
+                        .map(|entry| entry.to_string_opts(opts))
+                        .join(", ");
+                    let name = ProcedureKind::RowVector.to_string();
+                    format!("{name}[{entries_str}]")
+                } else {
+                    let entries_str = join_nested(mat.rows_ref(), opts);
+                    let name = ProcedureKind::Matrix.to_string();
+                    format!("{name}[{entries_str}]")
+                }
             }
         }
     }
@@ -252,7 +270,7 @@ impl Exp {
     pub fn to_pretty_string_opts(&self, opts: PrintOptions) -> String {
         match self {
             Exp::Matrix(mat) => {
-                let rows = mat.rows();
+                let rows = mat.rows_ref();
                 let height = mat.height();
                 let width = mat.width();
                 let mut rows_str: Vec<Vec<String>> = Vec::new();

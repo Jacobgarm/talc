@@ -25,7 +25,7 @@ impl Default for REPLContext {
 }
 
 pub fn repl(mut eval_context: Context) {
-    println!("\nStarting Talc REPL...\n");
+    println!("\nStarting Talc REPL...");
 
     let mut repl_context = REPLContext::default();
 
@@ -38,6 +38,7 @@ pub fn repl(mut eval_context: Context) {
     }
 
     'repl: loop {
+        println!();
         let read_result = editor.readline("::> ");
 
         let line = match read_result {

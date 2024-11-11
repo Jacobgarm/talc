@@ -3,6 +3,7 @@ use std::rc::Rc;
 use crate::linalg;
 
 pub mod operators;
+use itertools::Itertools;
 pub use operators::*;
 
 pub mod procedures;
@@ -124,10 +125,84 @@ impl Exp {
 
         Self::RelationChain { rels, terms }
     }
-}
 
-impl From<Numeric> for Exp {
-    fn from(value: Numeric) -> Self {
-        Self::Number(value)
+    pub fn map<F>(&self, mut f: F) -> Exp
+    where
+        F: FnMut(&Exp) -> Exp,
+    {
+        use Exp::*;
+        match self {
+            Number(..) | Inf | ImagUnit | Var { .. } | Bool(..) => self.clone(),
+            Unary { op, operand } => Unary {
+                op: *op,
+                operand: f(operand).into(),
+            },
+            Dyadic { op, left, right } => Dyadic {
+                op: *op,
+                left: f(left).into(),
+                right: f(right).into(),
+            },
+            Pool { op, terms } => Pool {
+                op: *op,
+                terms: terms.iter().map(f).collect_vec(),
+            },
+            RelationChain { rels, terms } => RelationChain {
+                rels: rels.clone(),
+                terms: terms.iter().map(f).collect_vec(),
+            },
+            Function { name, primes, args } => Function {
+                name: name.clone(),
+                primes: primes.clone(),
+                args: args.iter().map(f).collect_vec(),
+            },
+            Procedure { kind, args } => Procedure {
+                kind: *kind,
+                args: args
+                    .iter()
+                    .map(|row| row.iter().map(&mut f).collect_vec())
+                    .collect_vec(),
+            },
+            Matrix(mat) => Matrix(mat.map(f)),
+        }
+    }
+
+    pub fn try_map<F, E>(&self, mut f: F) -> Result<Exp, E>
+    where
+        F: FnMut(&Exp) -> Result<Exp, E>,
+    {
+        use Exp::*;
+        Ok(match self {
+            Number(..) | Inf | ImagUnit | Var { .. } | Bool(..) => self.clone(),
+            Unary { op, operand } => Unary {
+                op: *op,
+                operand: f(operand)?.into(),
+            },
+            Dyadic { op, left, right } => Dyadic {
+                op: *op,
+                left: f(left)?.into(),
+                right: f(right)?.into(),
+            },
+            Pool { op, terms } => Pool {
+                op: *op,
+                terms: terms.iter().map(f).try_collect()?,
+            },
+            RelationChain { rels, terms } => RelationChain {
+                rels: rels.clone(),
+                terms: terms.iter().map(f).try_collect()?,
+            },
+            Function { name, primes, args } => Function {
+                name: name.clone(),
+                primes: primes.clone(),
+                args: args.iter().map(f).try_collect()?,
+            },
+            Procedure { kind, args } => Procedure {
+                kind: *kind,
+                args: args
+                    .iter()
+                    .map(|row| row.iter().map(&mut f).try_collect())
+                    .try_collect()?,
+            },
+            Matrix(mat) => Matrix(mat.try_map(f)?),
+        })
     }
 }
