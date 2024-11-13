@@ -93,6 +93,10 @@ impl Matrix {
         })
     }
 
+    pub fn scale(&self, exp: &Exp) -> Self {
+        self.map(|entry| Exp::assoc_combine(AssocOp::Mul, exp.clone(), entry.clone()))
+    }
+
     pub fn rows(self) -> Vec<Vec<Exp>> {
         self.rows
     }
@@ -120,6 +124,14 @@ impl From<Matrix> for Exp {
     }
 }
 
+impl std::ops::Index<(usize, usize)> for Matrix {
+    type Output = Exp;
+
+    fn index(&self, index: (usize, usize)) -> &Self::Output {
+        &self.rows[index.0][index.1]
+    }
+}
+
 impl std::ops::Add for &Matrix {
     type Output = Matrix;
 
@@ -142,14 +154,53 @@ impl std::ops::Add for Matrix {
 
     fn add(self, rhs: Self) -> Self::Output {
         let mut rows = Vec::new();
-        for (row1, row2) in self.rows().into_iter().zip(rhs.rows().into_iter()) {
+        for (row1, row2) in self.rows().into_iter().zip_eq(rhs.rows().into_iter()) {
             let row = row1
                 .into_iter()
-                .zip(row2.into_iter())
+                .zip_eq(row2.into_iter())
                 .map(|(exp1, exp2)| Exp::assoc_combine(AssocOp::Add, exp1, exp2))
                 .collect_vec();
             rows.push(row);
         }
         Matrix { rows }
+    }
+}
+
+impl std::ops::Mul for &Matrix {
+    type Output = Matrix;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        let mut rows = Vec::new();
+        let common_len = self.width();
+        if common_len != rhs.height() {
+            panic!("incompatible matrix sizes")
+        }
+        for i in 0..self.height() {
+            let mut row = Vec::new();
+            for j in 0..rhs.width() {
+                row.push(
+                    (0..common_len)
+                        .map(|k| {
+                            Exp::assoc_combine(
+                                AssocOp::Mul,
+                                self[(i, k)].clone(),
+                                rhs[(j, k)].clone(),
+                            )
+                        })
+                        .reduce(|a, b| Exp::assoc_combine(AssocOp::Add, a, b))
+                        .expect("empty matrix"),
+                )
+            }
+            rows.push(row);
+        }
+
+        Matrix { rows }
+    }
+}
+
+impl std::ops::Mul for Matrix {
+    type Output = Matrix;
+    fn mul(self, rhs: Self) -> Self::Output {
+        &self * &rhs
     }
 }

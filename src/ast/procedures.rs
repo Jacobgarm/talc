@@ -8,14 +8,11 @@ pub enum ProcedureKind {
     #[strum(serialize = "assuming")]
     Assuming,
 
+    #[strum(serialize = "eval_default")]
+    EvalDefaultContext,
+
     #[strum(serialize = "PW")]
     Piecewise,
-
-    #[strum(serialize = "deri")]
-    Derivative,
-
-    #[strum(serialize = "integral")]
-    Integral,
 
     #[strum(serialize = "sum")]
     Sum,
@@ -25,6 +22,12 @@ pub enum ProcedureKind {
 
     #[strum(serialize = "lim")]
     Limit,
+
+    #[strum(serialize = "deri")]
+    Derivative,
+
+    #[strum(serialize = "integral")]
+    Integral,
 
     #[strum(serialize = "simp")]
     Simplify,
@@ -70,9 +73,6 @@ pub enum ProcedureKind {
 
     #[strum(serialize = "jacobian")]
     Jacobian,
-
-    #[strum(serialize = "eval_default")]
-    EvalDefaultContext,
 }
 
 impl ProcedureKind {

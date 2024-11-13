@@ -19,7 +19,7 @@ pub struct FunctionInfo {
     codomain: Option<Set>,
     partial_deris: Option<Vec<Exp>>,
     integral: Option<Exp>,
-    float_func: Option<fn(f64) -> f64>,
+    pub float_func: Option<fn(f64) -> f64>,
     //big_func: Option<&'static dyn Fn(&[Float]) -> Float>,
 }
 

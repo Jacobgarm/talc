@@ -135,6 +135,25 @@ impl std::ops::Add for Numeric {
     }
 }
 
+impl std::ops::Mul for &Numeric {
+    type Output = Numeric;
+    fn mul(self, rhs: Self) -> Self::Output {
+        match most_precise_first(self, rhs) {
+            (Integer(a), Integer(b)) => Integer(a * b),
+            (Integer(a), Rational(b)) => Rational(Rational::from(a) * b),
+            (Rational(a), Rational(b)) => Rational(a * b),
+            _ => todo!(),
+        }
+    }
+}
+
+impl std::ops::Mul for Numeric {
+    type Output = Numeric;
+    fn mul(self, rhs: Self) -> Self::Output {
+        &self * &rhs
+    }
+}
+
 impl From<Numeric> for crate::ast::Exp {
     fn from(value: Numeric) -> Self {
         Self::Number(value)

@@ -1,5 +1,3 @@
-use fold::add_fold;
-
 use crate::ast::{AssocOp, Exp, Numeric, ProcedureKind};
 use crate::context::Context;
 use crate::linalg;
@@ -46,24 +44,27 @@ impl Exp {
                     exp
                 }
             }
-            Pool {
-                op: AssocOp::Add,
-                terms,
-            } => {
-                let mut new_terms = add_fold(terms, ctx)?;
-                if new_terms.len() == 1 {
-                    new_terms.pop().unwrap()
-                } else {
-                    Pool {
-                        op: AssocOp::Add,
-                        terms: new_terms,
-                    }
-                }
-            }
+            Pool { op, terms } => eval_pool(op, terms, ctx)?,
             Procedure { kind, args } => eval_procedure(kind, &args, ctx)?,
             _ => exp.clone(),
         })
     }
+}
+
+fn eval_pool(op: AssocOp, terms: Vec<Exp>, ctx: &Context) -> EvalResult<Exp> {
+    let mut new_terms = match op {
+        AssocOp::Add => fold::add_fold(terms, ctx)?,
+        AssocOp::Mul => fold::mul_fold(terms, ctx)?,
+        _ => unimplemented!(),
+    };
+    Ok(if new_terms.len() == 1 {
+        new_terms.pop().unwrap()
+    } else {
+        Exp::Pool {
+            op,
+            terms: new_terms,
+        }
+    })
 }
 
 fn eval_procedure(kind: ProcedureKind, args: &[Vec<Exp>], ctx: &Context) -> EvalResult<Exp> {

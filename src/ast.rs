@@ -1,9 +1,8 @@
-use std::rc::Rc;
+use itertools::Itertools;
 
 use crate::linalg;
 
 pub mod operators;
-use itertools::Itertools;
 pub use operators::*;
 
 pub mod procedures;
@@ -23,12 +22,12 @@ pub enum Exp {
     },
     Unary {
         op: operators::UnaryOp,
-        operand: Rc<Exp>,
+        operand: Box<Exp>,
     },
     Dyadic {
         op: operators::DyadicOp,
-        left: Rc<Exp>,
-        right: Rc<Exp>,
+        left: Box<Exp>,
+        right: Box<Exp>,
     },
     Pool {
         op: operators::AssocOp,

@@ -12,13 +12,14 @@ pub enum UnaryOp {
 }
 
 impl UnaryOp {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::Factorial,
         Self::Abs,
         Self::Arg,
         Self::Floor,
         Self::Ceil,
         Self::Norm,
+        Self::Not,
     ];
 
     pub fn symbols(&self) -> (&'static str, &'static str) {
