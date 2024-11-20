@@ -1,3 +1,4 @@
+#![allow(unused_variables)]
 use malachite::{num::basic::traits::Zero, Float};
 
 pub fn approx_pi(iters: u32) -> Float {

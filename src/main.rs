@@ -1,3 +1,5 @@
+#![feature(let_chains)]
+
 use talc::context::Context;
 
 mod repl;

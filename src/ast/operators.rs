@@ -1,5 +1,7 @@
 use std::{cell::LazyCell, collections::HashMap};
 
+use crate::typing::ExpType;
+
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
 pub enum UnaryOp {
     Factorial,
@@ -185,7 +187,7 @@ impl AssocOp {
         use AssocOp::*;
         match self {
             LogicOr => '∨',
-            LogicXor => '⨁',
+            LogicXor => '⊻',
             LogicAnd => '∧',
             Union => '∪',
             Intersection => '∩',
@@ -204,6 +206,16 @@ impl AssocOp {
             Intersection => 6,
             Add => 7,
             Mul => 8,
+        }
+    }
+
+    pub fn accepted_types(self) -> &'static [ExpType] {
+        use AssocOp::*;
+        match self {
+            LogicOr | LogicXor | LogicAnd => &[ExpType::Bool],
+            Union | Intersection => &[ExpType::Set],
+            Add => &[ExpType::Numeric, ExpType::Matrix],
+            Mul => &[ExpType::Numeric, ExpType::Matrix],
         }
     }
 }

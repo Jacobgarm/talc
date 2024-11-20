@@ -20,6 +20,7 @@ pub struct FunctionInfo {
     partial_deris: Option<Vec<Exp>>,
     integral: Option<Exp>,
     pub float_func: Option<fn(f64) -> f64>,
+    pub vec_float_func: Option<fn(Vec<f64>) -> Vec<f64>>,
     //big_func: Option<&'static dyn Fn(&[Float]) -> Float>,
 }
 
@@ -43,7 +44,8 @@ pub struct Context {
     variables: HashMap<String, VarInfo>,
     functions: HashMap<String, FunctionInfo>,
     relations: HashMap<(Exp, Relation), Exp>,
-    foil_level: FoilLevel,
+    pub foil_level: FoilLevel,
+    pub approx_level: ApproxLevel,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,6 +53,13 @@ pub enum FoilLevel {
     Always,
     SingleAlgebraic,
     Never,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ApproxLevel {
+    None,
+    BigFloat(u64),
+    SmallFloat,
 }
 
 thread_local! {
@@ -64,6 +73,7 @@ impl Context {
             functions: HashMap::new(),
             relations: HashMap::new(),
             foil_level: FoilLevel::SingleAlgebraic,
+            approx_level: ApproxLevel::None,
         }
     }
 
@@ -168,6 +178,7 @@ impl Default for Context {
             functions,
             relations,
             foil_level: FoilLevel::SingleAlgebraic,
+            approx_level: ApproxLevel::None,
         }
     }
 }

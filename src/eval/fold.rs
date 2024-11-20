@@ -1,9 +1,6 @@
-use std::borrow::Borrow;
+use ordermap::{OrderMap, OrderSet};
 
-use malachite::Integer;
-use ordered_hash_map::OrderedHashMap;
-
-use crate::ast::{AssocOp, DyadicOp, Exp, Numeric};
+use crate::ast::{AssocOp, DyadicOp, Exp, Numeric, UnaryOp};
 use crate::context::Context;
 use crate::eval::{EvalError, EvalResult};
 use crate::linalg::Matrix;
@@ -34,11 +31,9 @@ pub fn add_fold(terms: Vec<Exp>, ctx: &Context) -> EvalResult<Vec<Exp>> {
     }
 
     let mut cur_head = NumOrMat::Neither;
-    let mut leftovers = OrderedHashMap::new();
+    let mut leftovers = OrderMap::new();
 
-    let flattened_terms = flatten_pool(AssocOp::Add, terms);
-
-    for term in flattened_terms.into_iter() {
+    for term in terms.into_iter() {
         match term {
             Exp::Number(num) => {
                 cur_head = match cur_head {
@@ -81,18 +76,16 @@ pub fn add_fold(terms: Vec<Exp>, ctx: &Context) -> EvalResult<Vec<Exp>> {
                         terms: mul_terms,
                     }
                 };
-                if let Some(coef) = leftovers.get_mut(&rest) {
-                    *coef = &inner_coef + coef;
-                } else {
-                    leftovers.insert(rest, inner_coef);
-                };
+                leftovers
+                    .entry(rest)
+                    .and_modify(|coef| *coef = &inner_coef + coef)
+                    .or_insert(inner_coef);
             }
             exp => {
-                if let Some(coef) = leftovers.get_mut(&exp) {
-                    *coef = &Numeric::ONE_INT + coef;
-                } else {
-                    leftovers.insert(exp, Numeric::ONE_INT);
-                };
+                leftovers
+                    .entry(exp)
+                    .and_modify(|coef| *coef = &Numeric::ONE_INT + coef)
+                    .or_insert(Numeric::ONE_INT);
             }
         }
     }
@@ -100,7 +93,7 @@ pub fn add_fold(terms: Vec<Exp>, ctx: &Context) -> EvalResult<Vec<Exp>> {
     let mut new_terms = Vec::new();
 
     match cur_head {
-        NumOrMat::Num(num) if !num.is_one() => new_terms.push(num.into()),
+        NumOrMat::Num(num) if !num.is_zero() => new_terms.push(num.into()),
         NumOrMat::Mat(mat) => new_terms.push(mat.try_map(|exp| exp.eval(ctx))?.into()),
         _ => (),
     }
@@ -128,11 +121,9 @@ pub fn mul_fold(terms: Vec<Exp>, ctx: &Context) -> EvalResult<Vec<Exp>> {
 
     let mut cur_num_head = None;
     let mut non_commuting_terms = Vec::new();
-    let mut leftovers = OrderedHashMap::new();
+    let mut leftovers = OrderMap::new();
 
-    let flattened_terms = flatten_pool(AssocOp::Mul, terms);
-
-    for term in flattened_terms.into_iter() {
+    for term in terms.into_iter() {
         match term {
             Exp::Number(num) => {
                 cur_num_head = Some(match cur_num_head {
@@ -160,19 +151,17 @@ pub fn mul_fold(terms: Vec<Exp>, ctx: &Context) -> EvalResult<Vec<Exp>> {
                 left,
                 right: box Exp::Number(num),
             } => {
-                if let Some(pow) = leftovers.get_mut(&*left) {
-                    *pow = &*pow + &num;
-                } else {
-                    leftovers.insert(*left, num);
-                };
+                leftovers
+                    .entry(*left)
+                    .and_modify(|pow| *pow = &num + pow)
+                    .or_insert(num);
             }
 
             exp => {
-                if let Some(pow) = leftovers.get_mut(&exp) {
-                    *pow = &*pow + &Numeric::ONE_INT;
-                } else {
-                    leftovers.insert(exp, Numeric::ONE_INT);
-                };
+                leftovers
+                    .entry(exp)
+                    .and_modify(|pow| *pow = &Numeric::ONE_INT + pow)
+                    .or_insert(Numeric::ONE_INT);
             }
         }
     }
@@ -213,5 +202,99 @@ pub fn mul_fold(terms: Vec<Exp>, ctx: &Context) -> EvalResult<Vec<Exp>> {
         }
     }
 
+    if new_terms.is_empty() {
+        new_terms.push(Exp::ONE);
+    }
+
     Ok(new_terms)
+}
+
+pub fn and_or_fold(is_or: bool, terms: Vec<Exp>, _ctx: &Context) -> EvalResult<Vec<Exp>> {
+    let mut new_terms: OrderSet<Exp> = OrderSet::new();
+
+    for term in terms.into_iter() {
+        if let Exp::Bool(b) = term {
+            if b == is_or {
+                return Ok(vec![Exp::Bool(is_or)]);
+            } else {
+                continue;
+            }
+        }
+
+        if let Exp::Unary {
+            op: UnaryOp::Not,
+            operand: box ref oper,
+        } = term
+        {
+            if new_terms.contains(oper) {
+                return Ok(vec![Exp::Bool(is_or)]);
+            }
+        } else if new_terms.contains(&Exp::Unary {
+            op: UnaryOp::Not,
+            operand: term.clone().into(),
+        }) {
+            return Ok(vec![Exp::Bool(is_or)]);
+        }
+
+        new_terms.insert(term);
+    }
+
+    if new_terms.is_empty() {
+        return Ok(vec![Exp::Bool(!is_or)]);
+    }
+
+    Ok(new_terms.into_iter().collect())
+}
+
+pub fn xor_fold(terms: Vec<Exp>, _ctx: &Context) -> EvalResult<Vec<Exp>> {
+    let mut new_terms = OrderSet::new();
+
+    let mut odd_trues = false;
+
+    for term in terms.into_iter() {
+        match term {
+            Exp::Bool(true) => odd_trues = !odd_trues,
+            Exp::Bool(false) => continue,
+            exp => {
+                if new_terms.contains(&exp) {
+                    new_terms.remove(&exp);
+                } else {
+                    new_terms.insert(exp);
+                }
+            }
+        }
+    }
+
+    let mut new_new_terms = new_terms.clone();
+
+    for term in &new_terms {
+        if let Exp::Unary {
+            op: UnaryOp::Not,
+            operand: box operand,
+        } = term
+        {
+            if new_new_terms.contains(operand) {
+                new_new_terms.remove(term);
+                new_new_terms.remove(operand);
+                odd_trues = !odd_trues;
+            }
+        }
+    }
+
+    if odd_trues {
+        if new_new_terms.len() == 1 {
+            return Ok(vec![Exp::Unary {
+                op: UnaryOp::Not,
+                operand: new_new_terms.pop().unwrap().into(),
+            }]);
+        } else {
+            new_new_terms.shift_insert(0, Exp::Bool(true));
+        }
+    }
+
+    if new_new_terms.is_empty() {
+        new_new_terms.insert(Exp::Bool(false));
+    }
+
+    Ok(new_new_terms.into_iter().collect())
 }

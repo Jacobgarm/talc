@@ -116,6 +116,10 @@ impl Matrix {
     pub fn size(&self) -> (usize, usize) {
         (self.height(), self.width())
     }
+
+    pub fn iter_by_rows(&self) -> impl Iterator<Item = &Exp> {
+        self.rows_ref().iter().flatten()
+    }
 }
 
 impl From<Matrix> for Exp {

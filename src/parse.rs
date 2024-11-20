@@ -1,7 +1,7 @@
 use std::{char, cmp::Ordering, collections::HashMap, fmt::Display, str::FromStr};
 
 use itertools::Itertools;
-use lazy_regex::{regex_captures, regex_is_match, regex_replace_all};
+use lazy_regex::{regex, regex_captures, regex_is_match, regex_replace_all};
 use malachite::{num::conversion::traits::FromSciString, Integer, Rational};
 use operators::{infix_from_char, Infix};
 
@@ -11,7 +11,61 @@ pub fn is_valid_identifier(s: &str) -> bool {
     regex_is_match!(r"^\p{L}[\p{L}0-9_]*$", s)
 }
 
-pub fn preparse(mut subject: String) -> String {
+pub fn get_unicode_replacement(name: &str) -> Option<char> {
+    // Manual overrides
+    match name {
+        "true" => return Some('⊤'),
+        "false" => return Some('⊥'),
+        "xor" => return Some('⊻'),
+        _ => (),
+    }
+
+    let names = name.split('.').collect_vec();
+    if let Some(codex::Def::Symbol(sym)) = codex::SYM.get(names[0]) {
+        if let Some((_, tail)) = name.split_once('.') {
+            match sym {
+                codex::Symbol::Single(_) => (),
+                codex::Symbol::Multi(chs) => {
+                    for (id, ch) in chs {
+                        if *id == tail {
+                            return Some(*ch);
+                        }
+                    }
+                }
+            }
+            None
+        } else {
+            Some(match sym {
+                codex::Symbol::Single(ch) => ch,
+                codex::Symbol::Multi(chs) => chs[0].1,
+            })
+        }
+    } else {
+        None
+    }
+}
+
+pub fn preparse(subject: String) -> String {
+    // Replace names fore unicode characters with the characters using codex
+    let identifier = regex!(r"[a-zA-Z]+(?:\.[a-zA-Z]+)*");
+    let mut byte_offset = 0;
+    let mut s = subject.clone();
+    for hit in identifier.find_iter(&subject) {
+        let front = &subject[..hit.start()];
+        let back = &subject[hit.end()..];
+        if regex_is_match!(r".*[\w\.]$", front) || regex_is_match!(r"^[\[\w\.].*", back) {
+            continue;
+        }
+        if let Some(replacement) = get_unicode_replacement(hit.as_str()) {
+            s.replace_range(
+                (hit.start() as isize + byte_offset) as usize
+                    ..(hit.end() as isize + byte_offset) as usize,
+                &replacement.to_string(),
+            );
+            byte_offset -= hit.len() as isize - replacement.len_utf8() as isize;
+        }
+    }
+
     // Replacement symbols
     let symbols = [
         ("!=", "≠"),
@@ -26,39 +80,38 @@ pub fn preparse(mut subject: String) -> String {
     ];
 
     for (symbol, replacement) in symbols {
-        subject = subject.replace(symbol, replacement);
+        s = s.replace(symbol, replacement);
     }
 
     //Implicit multiplication
 
     // Juxtaposed parentheses
-    subject = subject.replace(")(", ")*(");
+    s = s.replace(")(", ")*(");
 
     // Number next to parentheses
-    subject = regex_replace_all!(
+    s = regex_replace_all!(
         r"(?<pre>(?:^|\W)[0-9]+(?:.[0-9]+)?)(?<post>\()",
-        &subject,
+        &s,
         |_, pre, post| format!("{}*{}", pre, post),
     )
     .to_string();
 
     // Number next to variable
-    subject = regex_replace_all!(
+    s = regex_replace_all!(
         r"(?<pre>(?:^|\W)[0-9]+(?:.[0.9]+)?)(?<post>\p{L})",
-        &subject,
+        &s,
         |_, pre, post| format!("{}*{}", pre, post),
     )
     .to_string();
 
     // Parenthesis next to variable or number
-    subject = regex_replace_all!(
-        r"(?<pre>\))(?<post>\p{L})",
-        &subject,
-        |_, pre, post| format!("{}*{}", pre, post),
-    )
+    s = regex_replace_all!(r"(?<pre>\))(?<post>\p{L})", &s, |_, pre, post| format!(
+        "{}*{}",
+        pre, post
+    ),)
     .to_string();
 
-    subject
+    s
 }
 
 #[derive(Debug, Clone)]

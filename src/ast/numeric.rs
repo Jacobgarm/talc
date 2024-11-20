@@ -85,6 +85,13 @@ impl Numeric {
         };
         Rational(val)
     }
+
+    pub fn euclid_mod(&self, rhs: &Self) -> Self {
+        match most_precise_first(self, rhs) {
+            (Self::Integer(a), Self::Integer(b)) => Self::Integer(((a % b) + b) % b),
+            _ => todo!(),
+        }
+    }
 }
 
 pub fn common_form(a: Numeric, b: Numeric) -> (Numeric, Numeric) {
@@ -123,6 +130,7 @@ impl std::ops::Add for &Numeric {
             (Integer(a), Integer(b)) => Integer(a + b),
             (Integer(a), Rational(b)) => Rational(Rational::from(a) + b),
             (Rational(a), Rational(b)) => Rational(a + b),
+            (Small(a), Small(b)) => Small(NiceFloat(a.0 + b.0)),
             _ => todo!(),
         }
     }
@@ -142,6 +150,7 @@ impl std::ops::Mul for &Numeric {
             (Integer(a), Integer(b)) => Integer(a * b),
             (Integer(a), Rational(b)) => Rational(Rational::from(a) * b),
             (Rational(a), Rational(b)) => Rational(a * b),
+            (Small(a), Small(b)) => Small(NiceFloat(a.0 * b.0)),
             _ => todo!(),
         }
     }

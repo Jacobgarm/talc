@@ -1,6 +1,8 @@
 use itertools::Itertools;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::Display, strum::EnumString)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, strum::Display, strum::EnumString, strum::EnumIter,
+)]
 pub enum ProcedureKind {
     #[strum(serialize = "approx")]
     Approximate,

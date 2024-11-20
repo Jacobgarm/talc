@@ -68,6 +68,21 @@ impl Exp {
         }
     }
 
+    pub fn is_simple(&self) -> bool {
+        use Exp::*;
+        match self {
+            Number(..) | Bool(..) | ImagUnit | Inf => true,
+            Var { .. }
+            | Unary { .. }
+            | Dyadic { .. }
+            | Pool { .. }
+            | RelationChain { .. }
+            | Function { .. }
+            | Procedure { .. }
+            | Matrix { .. } => false,
+        }
+    }
+
     pub fn assoc_combine(op: AssocOp, first: Self, second: Self) -> Self {
         let mut terms = Vec::new();
 
