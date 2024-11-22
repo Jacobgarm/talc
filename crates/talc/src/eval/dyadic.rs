@@ -1,9 +1,10 @@
+use talc_utils::try_int_to_signed;
+
 use crate::{
     ast::{DyadicOp, Exp, UnaryOp},
     context::Context,
     linalg,
     typing::ExpType,
-    utils::try_int_to_signed,
 };
 
 use super::{EvalError, EvalResult};

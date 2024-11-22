@@ -1,19 +1,26 @@
-[package]
-name = "talc"
+[workspace]
+members = ["crates/*"]
+default-members = ["crates/talc-repl"]
+resolver = "2"
+
+[workspace.package]
 version = "0.1.0"
 edition = "2021"
 authors = ["Jacob Garm <jacobgarm@hotmail.dk>"]
 description = "A Computer Algebra System written in Rust"
+repository = "https://github.com/jacobgarm/talc"
 license = "MIT"
-keywords = ["math"]
+keywords = ["math", "cas"]
+categories = ["mathematics"]
+readme = "README.md"
 
-[dependencies]
-bimap = "0.6.3"
+[workspace.dependencies]
+talc = { path = "crates/talc" }
+talc-repl = { path = "crates/talc-repl" }
+talc-utils = { path = "crates/talc-utils" }
+talc-plot = { path = "crates/talc-plot" }
 itertools = "0.13.0"
 lazy-regex = "3.3.0"
+strum = { version = "0.26.3", features = ["derive"] }
 malachite = { version = "0.4.16", features = ["floats", "malachite-float"] }
 malachite-float = "0.4.16"
-ordermap = "0.5.3"
-rustyline = { version = "15.0.0", features = ["derive"] }
-strum = { version = "0.26.3", features = ["derive"] }
-codex = {git = "https://github.com/typst/codex.git"}

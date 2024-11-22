@@ -1,3 +1,5 @@
+use talc_utils::try_int_to_unsigned;
+
 use super::{EvalError, EvalResult, Exp};
 
 use crate::ast::Numeric;
@@ -41,7 +43,7 @@ pub fn eval_procedure(kind: ProcedureKind, args: Vec<Vec<Exp>>, ctx: &Context) -
                         args[0][0]
                     )));
                 };
-                let Some(prec) = crate::utils::try_int_to_unsigned(prec_int) else {
+                let Some(prec) = try_int_to_unsigned(prec_int) else {
                     return Err(EvalError::ProcedureError(format!(
                         "invalid precision {}",
                         args[0][0]

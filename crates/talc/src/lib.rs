@@ -6,7 +6,6 @@
 pub mod ast;
 pub mod context;
 pub mod linalg;
-pub mod utils;
 pub use ast::operators;
 pub mod display;
 pub mod eval;

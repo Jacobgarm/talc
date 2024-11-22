@@ -1,0 +1,18 @@
+[package]
+name = "talc-repl"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+repository = { workspace = true }
+license = { workspace = true }
+
+[[bin]]
+name = "talc"
+path = "src/main.rs"
+
+[dependencies]
+talc = { workspace = true}
+itertools = { workspace = true }
+lazy-regex = { workspace = true }
+strum = { workspace = true }
+rustyline = { version = "15.0.0", features = ["derive"] }

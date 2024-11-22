@@ -1,0 +1,18 @@
+[package]
+name = "talc"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+talc-utils = { workspace = true }
+itertools = { workspace = true }
+lazy-regex = { workspace = true }
+strum = { workspace = true }
+malachite = { workspace = true }
+malachite-float = { workspace = true }
+bimap = "0.6.3"
+ordermap = "0.5.3"
+codex = {git = "https://github.com/typst/codex.git"}

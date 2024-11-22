@@ -1,0 +1,10 @@
+[package]
+name = "talc-utils"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+malachite = { workspace = true }
