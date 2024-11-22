@@ -122,7 +122,10 @@ impl ProcedureKind {
 
     pub fn eagerly_eval_args(self) -> bool {
         use ProcedureKind::*;
-        matches!(self, ColumnVector | RowVector | Matrix | DiagonalMatrix)
+        matches!(
+            self,
+            ColumnVector | RowVector | Matrix | DiagonalMatrix | Approximate
+        )
     }
 
     pub fn signature_string(self) -> String {

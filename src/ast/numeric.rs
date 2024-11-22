@@ -1,3 +1,4 @@
+use malachite::num::arithmetic::traits::Pow;
 use malachite::num::basic::traits::{NegativeOne, One, Zero};
 use malachite::num::conversion::traits::RoundingFrom;
 use malachite::num::float::NiceFloat;
@@ -29,12 +30,28 @@ impl Numeric {
         }
     }
 
+    pub fn is_exact_zero(&self) -> bool {
+        match self {
+            Integer(int) => *int == 0,
+            Rational(rat) => *rat == 0,
+            Big(_) | Small(_) => false,
+        }
+    }
+
     pub fn is_one(&self) -> bool {
         match self {
             Integer(int) => *int == 1,
             Rational(rat) => *rat == 1,
             Big(float) => float.0 == 1,
             Small(float) => float.0 == 1.0,
+        }
+    }
+
+    pub fn is_exact_one(&self) -> bool {
+        match self {
+            Integer(int) => *int == 1,
+            Rational(rat) => *rat == 1,
+            Big(_) | Small(_) => false,
         }
     }
 
@@ -86,6 +103,15 @@ impl Numeric {
         Rational(val)
     }
 
+    pub fn powi(&self, pow: i64) -> Self {
+        match self {
+            Integer(int) if pow >= 0 => Self::Integer(int.pow(pow as u64)),
+            Integer(int) => Self::Rational(Rational::from(int).pow(pow)),
+            Rational(rat) => Self::Rational(rat.pow(pow)),
+            _ => todo!(),
+        }
+    }
+
     pub fn euclid_mod(&self, rhs: &Self) -> Self {
         match most_precise_first(self, rhs) {
             (Self::Integer(a), Self::Integer(b)) => Self::Integer(((a % b) + b) % b),
@@ -128,10 +154,25 @@ impl std::ops::Add for &Numeric {
     fn add(self, rhs: Self) -> Self::Output {
         match most_precise_first(self, rhs) {
             (Integer(a), Integer(b)) => Integer(a + b),
+
             (Integer(a), Rational(b)) => Rational(Rational::from(a) + b),
             (Rational(a), Rational(b)) => Rational(a + b),
+
+            (Integer(a), Big(b)) => Big(ComparableFloat(&b.0 + Rational::from(a))),
+            (Rational(a), Big(b)) => Big(ComparableFloat(&b.0 + a)),
+            (Big(a), Big(b)) => Big(ComparableFloat(&b.0 + &a.0)),
+
+            (Integer(a), Small(b)) => Small(NiceFloat(
+                f64::rounding_from(a, RoundingMode::Nearest).0 + b.0,
+            )),
+            (Rational(a), Small(b)) => Small(NiceFloat(
+                f64::rounding_from(a, RoundingMode::Nearest).0 + b.0,
+            )),
+            (Big(a), Small(b)) => Small(NiceFloat(
+                f64::rounding_from(&a.0, RoundingMode::Nearest).0 + b.0,
+            )),
             (Small(a), Small(b)) => Small(NiceFloat(a.0 + b.0)),
-            _ => todo!(),
+            _ => unreachable!(),
         }
     }
 }
@@ -147,11 +188,26 @@ impl std::ops::Mul for &Numeric {
     type Output = Numeric;
     fn mul(self, rhs: Self) -> Self::Output {
         match most_precise_first(self, rhs) {
-            (Integer(a), Integer(b)) => Integer(a * b),
+            (Integer(a), Integer(b)) => Integer(a + b),
+
             (Integer(a), Rational(b)) => Rational(Rational::from(a) * b),
             (Rational(a), Rational(b)) => Rational(a * b),
+
+            (Integer(a), Big(b)) => Big(ComparableFloat(&b.0 * Rational::from(a))),
+            (Rational(a), Big(b)) => Big(ComparableFloat(&b.0 * a)),
+            (Big(a), Big(b)) => Big(ComparableFloat(&b.0 * &a.0)),
+
+            (Integer(a), Small(b)) => Small(NiceFloat(
+                f64::rounding_from(a, RoundingMode::Nearest).0 * b.0,
+            )),
+            (Rational(a), Small(b)) => Small(NiceFloat(
+                f64::rounding_from(a, RoundingMode::Nearest).0 * b.0,
+            )),
+            (Big(a), Small(b)) => Small(NiceFloat(
+                f64::rounding_from(&a.0, RoundingMode::Nearest).0 * b.0,
+            )),
             (Small(a), Small(b)) => Small(NiceFloat(a.0 * b.0)),
-            _ => todo!(),
+            _ => unreachable!(),
         }
     }
 }
@@ -160,6 +216,18 @@ impl std::ops::Mul for Numeric {
     type Output = Numeric;
     fn mul(self, rhs: Self) -> Self::Output {
         &self * &rhs
+    }
+}
+
+impl TryFrom<Numeric> for Integer {
+    type Error = &'static str;
+
+    fn try_from(value: Numeric) -> Result<Self, Self::Error> {
+        match value {
+            Integer(int) => Ok(int),
+            Rational(rat) if rat.denominator_ref() == &1 => Ok(rat.into_numerator().into()),
+            _ => Err("not integer"),
+        }
     }
 }
 

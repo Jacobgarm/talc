@@ -3,7 +3,7 @@ use ordermap::{OrderMap, OrderSet};
 use crate::ast::{AssocOp, DyadicOp, Exp, Numeric, UnaryOp};
 use crate::context::Context;
 use crate::eval::{EvalError, EvalResult};
-use crate::linalg::Matrix;
+use crate::linalg::{self, Matrix};
 
 pub fn flatten_pool(op: AssocOp, terms: Vec<Exp>) -> Vec<Exp> {
     terms
@@ -169,13 +169,28 @@ pub fn mul_fold(terms: Vec<Exp>, ctx: &Context) -> EvalResult<Vec<Exp>> {
     let mut new_terms = Vec::new();
 
     if let Some(num) = cur_num_head
-        && !num.is_one()
+        && !num.is_exact_one()
     {
-        new_terms.push(num.into());
+        if num.is_zero() {
+            if non_commuting_terms.len() == 1
+                && let Exp::Matrix(mat) = non_commuting_terms.pop().unwrap()
+            {
+                new_terms.push(linalg::Matrix::filled(num.into(), mat.size()).into());
+            } else {
+                new_terms.push(num.into());
+                new_terms.append(&mut non_commuting_terms);
+            }
+            return Ok(new_terms);
+        } else {
+            new_terms.push(num.into());
+        }
     }
 
-    for (term, pow) in leftovers.into_iter().filter(|(_, pow)| !pow.is_zero()) {
-        let full_term = if pow.is_one() {
+    for (term, pow) in leftovers
+        .into_iter()
+        .filter(|(_, pow)| !pow.is_exact_zero())
+    {
+        let full_term = if pow.is_exact_one() {
             term
         } else {
             Exp::Dyadic {

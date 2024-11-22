@@ -49,6 +49,12 @@ impl Matrix {
         Self { rows: vec![row] }
     }
 
+    pub fn filled(exp: Exp, size: (usize, usize)) -> Self {
+        Self {
+            rows: vec![vec![exp; size.1]; size.0],
+        }
+    }
+
     pub fn diagonal(diag: Vec<Exp>) -> Self {
         let size = diag.len();
         let rows = diag
@@ -65,6 +71,10 @@ impl Matrix {
 
     pub fn identity(size: usize) -> Self {
         Self::diagonal(vec![Exp::ONE; size])
+    }
+
+    pub fn is_square(&self) -> bool {
+        self.width() == self.height()
     }
 
     pub fn map<F>(&self, mut f: F) -> Self

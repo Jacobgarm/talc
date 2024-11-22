@@ -27,6 +27,9 @@ pub enum EvalError {
         op: AssocOp,
         ty: crate::typing::ExpType,
     },
+    NonSquareMatrixPower {
+        size: (usize, usize),
+    },
     FunctionWrongArgCount {
         expected: usize,
         got: usize,
@@ -97,6 +100,7 @@ fn eval_dyadic(op: DyadicOp, left: Exp, right: Exp, ctx: &Context) -> EvalResult
         DyadicOp::LogicEquiv => dyadic::eval_equiv(left, right, ctx),
         DyadicOp::LogicImplies => dyadic::eval_implies(left, right, ctx),
         DyadicOp::Mod => dyadic::eval_mod(left, right, ctx),
+        DyadicOp::Pow => dyadic::eval_pow(left, right, ctx),
         _ => Ok(Exp::Dyadic {
             op,
             left: left.into(),

@@ -1,6 +1,9 @@
 use crate::{
     ast::{DyadicOp, Exp, UnaryOp},
     context::Context,
+    linalg,
+    typing::ExpType,
+    utils::try_int_to_signed,
 };
 
 use super::{EvalError, EvalResult};
@@ -67,4 +70,52 @@ pub fn eval_mod(left: Exp, right: Exp, _ctx: &Context) -> EvalResult<Exp> {
             right: right.into(),
         })
     }
+}
+
+pub fn eval_pow(left: Exp, right: Exp, ctx: &Context) -> EvalResult<Exp> {
+    let Exp::Number(pow) = right else {
+        return Ok(Exp::Dyadic {
+            op: DyadicOp::Pow,
+            left: left.into(),
+            right: right.into(),
+        });
+    };
+
+    if pow.is_exact_one() {
+        return Ok(left);
+    }
+
+    if pow.is_exact_zero() {
+        if let Exp::Matrix(mat) = left {
+            return if !mat.is_square() {
+                Err(EvalError::NonSquareMatrixPower { size: mat.size() })
+            } else {
+                Ok(linalg::Matrix::identity(mat.height()).into())
+            };
+        }
+
+        if matches!(left.infer_type(ctx), ExpType::Unknown | ExpType::Numeric) {
+            return Ok(Exp::ONE);
+        }
+    }
+
+    if let Ok(pow_int) = malachite::Integer::try_from(pow.clone()) {
+        match left.clone() {
+            Exp::Number(num) => {
+                if pow_int < 0 && num.is_zero() {
+                    return Err(EvalError::DivisionByZero);
+                }
+                if let Some(pow_i64) = try_int_to_signed(&pow_int) {
+                    return Ok(num.powi(pow_i64).into());
+                }
+            }
+            _ => (),
+        }
+    }
+
+    Ok(Exp::Dyadic {
+        op: DyadicOp::Pow,
+        left: left.into(),
+        right: Exp::Number(pow).into(),
+    })
 }
