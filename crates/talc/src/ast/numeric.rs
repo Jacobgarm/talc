@@ -7,16 +7,16 @@ use malachite::{Integer, Rational};
 use malachite_float::{ComparableFloat, Float};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Numeric {
+pub enum RealNum {
     Integer(Integer),
     Rational(Rational),
     Big(ComparableFloat),
     Small(NiceFloat<f64>),
 }
 
-use Numeric::*;
+use RealNum::*;
 
-impl Numeric {
+impl RealNum {
     pub const ZERO_INT: Self = Integer(Integer::ZERO);
     pub const ONE_INT: Self = Integer(Integer::ONE);
     pub const NEGATIVE_ONE_INT: Self = Integer(Integer::NEGATIVE_ONE);
@@ -120,7 +120,7 @@ impl Numeric {
     }
 }
 
-pub fn common_form(a: Numeric, b: Numeric) -> (Numeric, Numeric) {
+pub fn common_form(a: RealNum, b: RealNum) -> (RealNum, RealNum) {
     match (&a, &b) {
         (Integer(..), Integer(..))
         | (Rational(..), Rational(..))
@@ -141,7 +141,7 @@ pub fn common_form(a: Numeric, b: Numeric) -> (Numeric, Numeric) {
     }
 }
 
-pub fn most_precise_first<'a>(a: &'a Numeric, b: &'a Numeric) -> (&'a Numeric, &'a Numeric) {
+pub fn most_precise_first<'a>(a: &'a RealNum, b: &'a RealNum) -> (&'a RealNum, &'a RealNum) {
     if a.precision() >= b.precision() {
         (a, b)
     } else {
@@ -149,8 +149,8 @@ pub fn most_precise_first<'a>(a: &'a Numeric, b: &'a Numeric) -> (&'a Numeric, &
     }
 }
 
-impl std::ops::Add for &Numeric {
-    type Output = Numeric;
+impl std::ops::Add for &RealNum {
+    type Output = RealNum;
     fn add(self, rhs: Self) -> Self::Output {
         match most_precise_first(self, rhs) {
             (Integer(a), Integer(b)) => Integer(a + b),
@@ -177,18 +177,56 @@ impl std::ops::Add for &Numeric {
     }
 }
 
-impl std::ops::Add for Numeric {
-    type Output = Numeric;
+impl std::ops::Add for RealNum {
+    type Output = RealNum;
     fn add(self, rhs: Self) -> Self::Output {
         &self + &rhs
     }
 }
 
-impl std::ops::Mul for &Numeric {
-    type Output = Numeric;
+impl std::ops::Neg for RealNum {
+    type Output = RealNum;
+    fn neg(self) -> Self::Output {
+        match self {
+            Integer(int) => Integer(-int),
+            Rational(rat) => Rational(-rat),
+            Big(big) => Big(ComparableFloat(-big.0)),
+            Small(small) => Small(NiceFloat(-small.0)),
+        }
+    }
+}
+
+impl std::ops::Neg for &RealNum {
+    type Output = RealNum;
+    fn neg(self) -> Self::Output {
+        match self {
+            Integer(int) => Integer(-int),
+            Rational(rat) => Rational(-rat),
+            Big(big) => Big(ComparableFloat(-big.0.clone())),
+            Small(small) => Small(NiceFloat(-small.0)),
+        }
+    }
+}
+
+impl std::ops::Sub for RealNum {
+    type Output = RealNum;
+    fn sub(self, rhs: Self) -> Self::Output {
+        self + (-rhs)
+    }
+}
+
+impl std::ops::Sub for &RealNum {
+    type Output = RealNum;
+    fn sub(self, rhs: Self) -> Self::Output {
+        self + &(-rhs)
+    }
+}
+
+impl std::ops::Mul for &RealNum {
+    type Output = RealNum;
     fn mul(self, rhs: Self) -> Self::Output {
         match most_precise_first(self, rhs) {
-            (Integer(a), Integer(b)) => Integer(a + b),
+            (Integer(a), Integer(b)) => Integer(a * b),
 
             (Integer(a), Rational(b)) => Rational(Rational::from(a) * b),
             (Rational(a), Rational(b)) => Rational(a * b),
@@ -212,17 +250,17 @@ impl std::ops::Mul for &Numeric {
     }
 }
 
-impl std::ops::Mul for Numeric {
-    type Output = Numeric;
+impl std::ops::Mul for RealNum {
+    type Output = RealNum;
     fn mul(self, rhs: Self) -> Self::Output {
         &self * &rhs
     }
 }
 
-impl TryFrom<Numeric> for Integer {
+impl TryFrom<RealNum> for Integer {
     type Error = &'static str;
 
-    fn try_from(value: Numeric) -> Result<Self, Self::Error> {
+    fn try_from(value: RealNum) -> Result<Self, Self::Error> {
         match value {
             Integer(int) => Ok(int),
             Rational(rat) if rat.denominator_ref() == &1 => Ok(rat.into_numerator().into()),
@@ -231,8 +269,8 @@ impl TryFrom<Numeric> for Integer {
     }
 }
 
-impl From<Numeric> for crate::ast::Exp {
-    fn from(value: Numeric) -> Self {
-        Self::Number(value)
+impl From<RealNum> for crate::ast::Exp {
+    fn from(value: RealNum) -> Self {
+        Self::Real(value)
     }
 }

@@ -4,7 +4,7 @@ use malachite::Float;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use crate::ast::{Exp, Numeric};
+use crate::ast::{ComplexNum, Exp, RealNum};
 use crate::operators::Relation;
 use crate::parse::parse;
 use crate::sets::Set;
@@ -105,7 +105,7 @@ impl Default for Context {
         use approximators::*;
         use std::f64::consts;
 
-        let simple_constants = [("i", Exp::ImagUnit)];
+        let simple_constants = [("i", Exp::Complex(ComplexNum::I))];
         let transcendental_constants = [
             ("π", consts::PI, approx_pi as fn(u32) -> Float),
             ("τ", consts::TAU, approx_tau as fn(u32) -> Float),
@@ -120,7 +120,7 @@ impl Default for Context {
 
         for (sym, val, approx) in transcendental_constants {
             let var_info = VarInfo {
-                exp: Exp::Number(Numeric::Small(NiceFloat(val))),
+                exp: RealNum::Small(NiceFloat(val)).into(),
                 approximator: Some(approx),
             };
             variables.insert(sym.to_owned(), var_info);

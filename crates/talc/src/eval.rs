@@ -1,4 +1,4 @@
-use crate::ast::{AssocOp, DyadicOp, Exp, Numeric, UnaryOp};
+use crate::ast::{AssocOp, ComplexNum, DyadicOp, Exp, RealNum, UnaryOp};
 use crate::context::{ApproxLevel, Context};
 use crate::typing::ExpType;
 
@@ -53,15 +53,12 @@ impl Exp {
         };
 
         Ok(match exp {
-            Number(val) => match ctx.approx_level {
-                ApproxLevel::None => Number(val),
-                ApproxLevel::SmallFloat => Number(val.smallify()),
-                ApproxLevel::BigFloat(prec) => Number(val.bigify(prec)),
-            },
+            Real(num) => eval_real(num, ctx).into(),
+            Complex(num) => eval_complex(num, ctx),
             Var { ref name } => {
                 if let Some(info) = ctx.get_var(name) {
                     let var_exp = &info.exp;
-                    if let Number(Numeric::Small(_)) = var_exp
+                    if let Real(RealNum::Small(_)) = var_exp
                         && ctx.approx_level != ApproxLevel::SmallFloat
                     {
                         exp
@@ -81,6 +78,26 @@ impl Exp {
             Function { name, primes, args } => functions::eval_function(name, primes, args, ctx)?,
             _ => exp,
         })
+    }
+}
+
+fn eval_real(num: RealNum, ctx: &Context) -> RealNum {
+    match ctx.approx_level {
+        ApproxLevel::None => num,
+        ApproxLevel::SmallFloat => num.smallify(),
+        ApproxLevel::BigFloat(prec) => num.bigify(prec),
+    }
+}
+
+fn eval_complex(num: ComplexNum, ctx: &Context) -> Exp {
+    if num.imag.is_zero() {
+        eval_real(num.real, ctx).into()
+    } else {
+        ComplexNum {
+            real: eval_real(num.real, ctx),
+            imag: eval_real(num.imag, ctx),
+        }
+        .into()
     }
 }
 

@@ -2,7 +2,7 @@ use itertools::Itertools;
 use malachite::{num::arithmetic::traits::IsPowerOf2, Natural};
 use std::{borrow::Borrow, fmt::Display};
 
-use crate::ast::{AssocOp, DyadicOp, Exp, Numeric, ProcedureKind};
+use crate::ast::{AssocOp, ComplexNum, DyadicOp, Exp, ProcedureKind, RealNum};
 
 #[derive(Debug, Clone, Copy)]
 pub struct PrintOptions {
@@ -26,11 +26,11 @@ fn is_power_of_2_and_5(num: &Natural) -> bool {
     reduced.is_power_of_2()
 }
 
-impl Numeric {
+impl RealNum {
     fn to_string_opts(&self, opts: PrintOptions) -> String {
         match self {
-            Numeric::Integer(int) => int.to_string(),
-            Numeric::Rational(frac) => {
+            RealNum::Integer(int) => int.to_string(),
+            RealNum::Rational(frac) => {
                 if opts.decimal_rationals && is_power_of_2_and_5(frac.denominator_ref()) {
                     let (before, after) = frac.to_digits(&Natural::from(10u64));
                     let after = after.into_vecs().0;
@@ -48,13 +48,44 @@ impl Numeric {
                     frac.to_string()
                 }
             }
-            Numeric::Small(float) => float.to_string(),
-            Numeric::Big(float) => float.to_string(),
+            RealNum::Small(float) => float.to_string(),
+            RealNum::Big(float) => float.to_string(),
         }
     }
 }
 
-impl Display for Numeric {
+impl Display for RealNum {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let opts = PrintOptions::default();
+        f.write_str(&self.to_string_opts(opts))
+    }
+}
+
+impl ComplexNum {
+    fn to_string_opts(&self, opts: PrintOptions) -> String {
+        let left = if self.real.is_exact_zero() {
+            "".to_owned()
+        } else {
+            self.real.to_string_opts(opts)
+        };
+        let sign = if self.imag.is_negative() { "" } else { "+" };
+
+        let right = if self.imag.is_exact_one() {
+            "i".to_owned()
+        } else if (-self.imag.clone()).is_exact_one() {
+            "-i".to_owned()
+        } else {
+            format!("{}i", self.imag.to_string_opts(opts))
+        };
+        if left.is_empty() {
+            right
+        } else {
+            format!("{left}{sign}{right}")
+        }
+    }
+}
+
+impl Display for ComplexNum {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let opts = PrintOptions::default();
         f.write_str(&self.to_string_opts(opts))
@@ -72,7 +103,10 @@ fn is_enclosed(exp: &Exp) -> bool {
         Exp::Unary { op, .. } => op.is_wrapping(),
         // RelationChains and pools with single terms are still considered unenclosed, to make them
         // more obvious
-        Exp::Dyadic { .. } | Exp::RelationChain { .. } | Exp::Pool { .. } => false,
+        Exp::Complex(..) | Exp::Dyadic { .. } | Exp::RelationChain { .. } | Exp::Pool { .. } => {
+            false
+        }
+        Exp::Real(RealNum::Rational(..)) => false,
 
         _ => true,
     }
@@ -80,6 +114,8 @@ fn is_enclosed(exp: &Exp) -> bool {
 
 fn infix_precedence(exp: &Exp) -> Option<u8> {
     match exp {
+        Exp::Real(RealNum::Rational(..)) => Some(AssocOp::Mul.precedence()),
+        Exp::Complex(..) => Some(AssocOp::Add.precedence()),
         Exp::Dyadic { op, .. } => Some(op.precedence()),
         Exp::RelationChain { rels, .. } => rels.first().map(|rel| rel.precedence()),
         Exp::Pool { op, .. } => Some(op.precedence()),
@@ -106,10 +142,10 @@ impl Exp {
     pub fn to_string_opts(&self, opts: PrintOptions) -> String {
         use Exp::*;
         match self {
-            Number(num) => num.to_string_opts(opts),
+            Real(num) => num.to_string_opts(opts),
+            Complex(num) => num.to_string_opts(opts),
             Bool(true) => "⊤".to_owned(),
             Bool(false) => "⊥".to_owned(),
-            ImagUnit => "i".to_owned(),
             Inf => "∞".to_owned(),
             Var { name } => name.to_owned(),
             Unary { op, operand } => {
@@ -127,7 +163,7 @@ impl Exp {
                 #[allow(clippy::needless_bool)]
                 let wrap_left = if is_enclosed(left) {
                     false
-                } else if let Number(val) = left.borrow()
+                } else if let Real(val) = left.borrow()
                     && val.is_negative()
                 {
                     true

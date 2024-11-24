@@ -1,5 +1,3 @@
-use talc_utils::try_int_to_signed;
-
 use crate::{
     ast::{DyadicOp, Exp, UnaryOp},
     context::Context,
@@ -56,8 +54,8 @@ pub fn eval_implies(left: Exp, right: Exp, _ctx: &Context) -> EvalResult<Exp> {
 }
 
 pub fn eval_mod(left: Exp, right: Exp, _ctx: &Context) -> EvalResult<Exp> {
-    if let Exp::Number(ref a) = left
-        && let Exp::Number(ref b) = right
+    if let Exp::Real(ref a) = left
+        && let Exp::Real(ref b) = right
     {
         if b.is_zero() {
             Err(EvalError::ModuloByZero)
@@ -74,7 +72,7 @@ pub fn eval_mod(left: Exp, right: Exp, _ctx: &Context) -> EvalResult<Exp> {
 }
 
 pub fn eval_pow(left: Exp, right: Exp, ctx: &Context) -> EvalResult<Exp> {
-    let Exp::Number(pow) = right else {
+    let Exp::Real(pow) = right else {
         return Ok(Exp::Dyadic {
             op: DyadicOp::Pow,
             left: left.into(),
@@ -102,11 +100,11 @@ pub fn eval_pow(left: Exp, right: Exp, ctx: &Context) -> EvalResult<Exp> {
 
     if let Ok(pow_int) = malachite::Integer::try_from(pow.clone()) {
         match left.clone() {
-            Exp::Number(num) => {
+            Exp::Real(num) => {
                 if pow_int < 0 && num.is_zero() {
                     return Err(EvalError::DivisionByZero);
                 }
-                if let Some(pow_i64) = try_int_to_signed(&pow_int) {
+                if let Ok(pow_i64) = i64::try_from(&pow_int) {
                     return Ok(num.powi(pow_i64).into());
                 }
             }
@@ -117,6 +115,6 @@ pub fn eval_pow(left: Exp, right: Exp, ctx: &Context) -> EvalResult<Exp> {
     Ok(Exp::Dyadic {
         op: DyadicOp::Pow,
         left: left.into(),
-        right: Exp::Number(pow).into(),
+        right: Exp::Real(pow).into(),
     })
 }

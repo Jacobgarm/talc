@@ -1,8 +1,7 @@
-use malachite::num::conversion::traits::{ConvertibleFrom, SaturatingFrom};
 use malachite::{num::arithmetic::traits::Factorial, Integer, Natural};
 
 use crate::{
-    ast::{Exp, Numeric, UnaryOp},
+    ast::{Exp, RealNum, UnaryOp},
     context::Context,
 };
 
@@ -24,9 +23,9 @@ pub fn eval_not(exp: Exp, _ctx: &Context) -> EvalResult<Exp> {
 
 pub fn eval_factorial(exp: Exp, _ctx: &Context) -> EvalResult<Exp> {
     match exp {
-        Exp::Number(Numeric::Integer(int)) if u64::convertible_from(&int) => {
-            let fac = Natural::factorial(u64::saturating_from(&int));
-            Ok(Numeric::Integer(Integer::from(fac)).into())
+        Exp::Real(RealNum::Integer(int)) if let Ok(unsigned) = u64::try_from(&int) => {
+            let fac = Natural::factorial(unsigned);
+            Ok(RealNum::Integer(Integer::from(fac)).into())
         }
         _ => Ok(Exp::Unary {
             op: UnaryOp::Factorial,

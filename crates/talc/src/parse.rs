@@ -446,13 +446,13 @@ fn parse_bounded(subject: &str, start: usize) -> ParseResult<Exp> {
     // Integers
     if regex_is_match!(r"^-?[0-9]+$", subject) {
         let int = Integer::from_str(subject).expect("failed parsing integer");
-        return Ok(Numeric::Integer(int).into());
+        return Ok(RealNum::Integer(int).into());
     }
 
     // Real numbers
     if regex_is_match!(r"^-?[0-9]+\.[0-9]+$", subject) {
         let rat = Rational::from_sci_string(subject).expect("failed real number parsing");
-        return Ok(Numeric::Rational(rat).into());
+        return Ok(RealNum::Rational(rat).into());
     }
 
     //Variables

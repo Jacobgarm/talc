@@ -1,6 +1,8 @@
+use std::ops::AddAssign;
+
 use ordermap::{OrderMap, OrderSet};
 
-use crate::ast::{AssocOp, DyadicOp, Exp, Numeric, UnaryOp};
+use crate::ast::{AssocOp, ComplexNum, DyadicOp, Exp, RealNum, UnaryOp};
 use crate::context::Context;
 use crate::eval::{EvalError, EvalResult};
 use crate::linalg::{self, Matrix};
@@ -19,54 +21,97 @@ pub fn flatten_pool(op: AssocOp, terms: Vec<Exp>) -> Vec<Exp> {
 }
 
 #[derive(Debug, Clone)]
-enum NumOrMat {
-    Neither,
-    Num(Numeric),
+enum AddHead {
+    Empty,
+    Real(RealNum),
+    Complex(ComplexNum),
     Mat(Matrix),
 }
 
+#[derive(Debug, Clone)]
+enum Number {
+    Real(RealNum),
+    Complex(ComplexNum),
+}
+
+impl Number {
+    fn simplify(self) -> Self {
+        if let Self::Complex(num) = self {
+            if num.is_real() {
+                Self::Real(num.real)
+            } else {
+                Self::Complex(num)
+            }
+        } else {
+            self
+        }
+    }
+}
+
+impl AddAssign<&Number> for Number {
+    fn add_assign(&mut self, rhs: &Number) {
+        use Number::*;
+        *self = match (&self, rhs) {
+            (Real(a), Real(b)) => Real(a + &b),
+            (Complex(a), Real(b)) => Complex(a + &b.clone().into()),
+            (Real(a), Complex(b)) => Complex(&ComplexNum::from(a.clone()) + b),
+            (Complex(a), Complex(b)) => Complex(a + &b),
+        }
+    }
+}
+
 pub fn add_fold(terms: Vec<Exp>, ctx: &Context) -> EvalResult<Vec<Exp>> {
+    use AddHead::*;
+
     if terms.len() <= 1 {
         return Ok(terms.to_vec());
     }
 
-    let mut cur_head = NumOrMat::Neither;
+    let mut cur_head = AddHead::Empty;
     let mut leftovers = OrderMap::new();
 
     for term in terms.into_iter() {
         match term {
-            Exp::Number(num) => {
+            Exp::Real(num) => {
                 cur_head = match cur_head {
-                    NumOrMat::Neither => NumOrMat::Num(num),
-                    NumOrMat::Num(head) => NumOrMat::Num(head + num),
-                    NumOrMat::Mat(_) => return Err(EvalError::MatrixScalarSum),
+                    Empty => Real(num),
+                    Real(head) => Real(head + num),
+                    Complex(head) => Complex(head + num.into()),
+                    Mat(_) => return Err(EvalError::MatrixScalarSum),
                 };
+            }
+            Exp::Complex(num) => {
+                cur_head = match cur_head {
+                    Empty => Complex(num),
+                    Real(head) => Complex(ComplexNum::from(head) + num),
+                    Complex(head) => Complex(head + num),
+                    Mat(_) => return Err(EvalError::MatrixScalarSum),
+                }
             }
             Exp::Matrix(mat) => {
                 cur_head = match cur_head {
-                    NumOrMat::Neither => NumOrMat::Mat(mat),
-                    NumOrMat::Mat(head) => {
+                    Empty => Mat(mat),
+                    Mat(head) => {
                         if head.size() != mat.size() {
                             return Err(EvalError::MatrixSizesIncompatibleAdd {
                                 left_size: head.size(),
                                 right_size: mat.size(),
                             });
                         } else {
-                            NumOrMat::Mat(head + mat)
+                            Mat(head + mat)
                         }
                     }
-                    NumOrMat::Num(_) => return Err(EvalError::MatrixScalarSum),
+                    Real(..) | Complex(..) => return Err(EvalError::MatrixScalarSum),
                 };
             }
             Exp::Pool {
                 op: AssocOp::Mul,
                 terms: mut mul_terms,
-            } if mul_terms
-                .first()
-                .is_some_and(|term| matches!(term, Exp::Number(..))) =>
-            {
-                let Exp::Number(inner_coef) = mul_terms.remove(0) else {
-                    unreachable!()
+            } if mul_terms.first().is_some_and(|term| term.is_number()) => {
+                let inner_coef = match mul_terms.remove(0) {
+                    Exp::Real(num) => Number::Real(num),
+                    Exp::Complex(num) => Number::Complex(num),
+                    _ => unreachable!(),
                 };
                 let rest = if mul_terms.len() == 1 {
                     mul_terms.pop().unwrap()
@@ -78,14 +123,14 @@ pub fn add_fold(terms: Vec<Exp>, ctx: &Context) -> EvalResult<Vec<Exp>> {
                 };
                 leftovers
                     .entry(rest)
-                    .and_modify(|coef| *coef = &inner_coef + coef)
+                    .and_modify(|coef| *coef += &inner_coef)
                     .or_insert(inner_coef);
             }
             exp => {
                 leftovers
                     .entry(exp)
-                    .and_modify(|coef| *coef = &Numeric::ONE_INT + coef)
-                    .or_insert(Numeric::ONE_INT);
+                    .and_modify(|coef| *coef += &Number::Real(RealNum::ONE_INT))
+                    .or_insert(Number::Real(RealNum::ONE_INT));
             }
         }
     }
@@ -93,16 +138,25 @@ pub fn add_fold(terms: Vec<Exp>, ctx: &Context) -> EvalResult<Vec<Exp>> {
     let mut new_terms = Vec::new();
 
     match cur_head {
-        NumOrMat::Num(num) if !num.is_zero() => new_terms.push(num.into()),
-        NumOrMat::Mat(mat) => new_terms.push(mat.try_map(|exp| exp.eval(ctx))?.into()),
+        Real(num) if !num.is_zero() => new_terms.push(num.into()),
+        Complex(num) if !num.is_zero() => new_terms.push(num.into()),
+        Mat(mat) => new_terms.push(mat.try_map(|exp| exp.eval(ctx))?.into()),
         _ => (),
     }
 
-    for (term, coef) in leftovers.into_iter().filter(|(_, c)| !c.is_zero()) {
-        let full_term = if coef.is_one() {
-            term
-        } else {
-            Exp::assoc_combine(AssocOp::Mul, coef.into(), term)
+    for (term, mut coef) in leftovers.into_iter() {
+        coef = coef.simplify();
+        let full_term = match coef {
+            Number::Real(num) => {
+                if num.is_zero() {
+                    continue;
+                } else if num.is_one() {
+                    term
+                } else {
+                    Exp::assoc_combine(AssocOp::Mul, num.into(), term)
+                }
+            }
+            Number::Complex(num) => Exp::assoc_combine(AssocOp::Mul, num.into(), term),
         };
         new_terms.push(full_term);
     }
@@ -124,11 +178,20 @@ pub fn mul_fold(terms: Vec<Exp>, ctx: &Context) -> EvalResult<Vec<Exp>> {
     let mut leftovers = OrderMap::new();
 
     for term in terms.into_iter() {
+        dbg!(&term);
         match term {
-            Exp::Number(num) => {
+            Exp::Real(num) => {
                 cur_num_head = Some(match cur_num_head {
-                    None => num,
-                    Some(cur) => cur * num,
+                    None => Number::Real(num),
+                    Some(Number::Real(cur)) => Number::Real(cur * num),
+                    Some(Number::Complex(cur)) => Number::Complex(cur * num.into()),
+                })
+            }
+            Exp::Complex(num) => {
+                cur_num_head = Some(match cur_num_head {
+                    None => Number::Complex(num),
+                    Some(Number::Real(cur)) => Number::Complex(ComplexNum::from(cur) * num),
+                    Some(Number::Complex(cur)) => Number::Complex(cur * num),
                 })
             }
             Exp::Matrix(mat) => {
@@ -149,55 +212,73 @@ pub fn mul_fold(terms: Vec<Exp>, ctx: &Context) -> EvalResult<Vec<Exp>> {
             Exp::Dyadic {
                 op: DyadicOp::Pow,
                 left,
-                right: box Exp::Number(num),
-            } => {
+                right: box pow,
+            } if pow.is_number() => {
+                let new_pow = match pow {
+                    Exp::Real(num) => Number::Real(num),
+                    Exp::Complex(num) => Number::Complex(num),
+                    _ => unreachable!(),
+                };
                 leftovers
                     .entry(*left)
-                    .and_modify(|pow| *pow = &num + pow)
-                    .or_insert(num);
+                    .and_modify(|pow| *pow += &new_pow)
+                    .or_insert(new_pow);
             }
 
             exp => {
                 leftovers
                     .entry(exp)
-                    .and_modify(|pow| *pow = &Numeric::ONE_INT + pow)
-                    .or_insert(Numeric::ONE_INT);
+                    .and_modify(|pow| *pow += &Number::Real(RealNum::ONE_INT))
+                    .or_insert(Number::Real(RealNum::ONE_INT));
             }
         }
     }
 
     let mut new_terms = Vec::new();
 
-    if let Some(num) = cur_num_head
-        && !num.is_exact_one()
-    {
-        if num.is_zero() {
-            if non_commuting_terms.len() == 1
-                && let Exp::Matrix(mat) = non_commuting_terms.pop().unwrap()
-            {
-                new_terms.push(linalg::Matrix::filled(num.into(), mat.size()).into());
+    cur_num_head = cur_num_head.map(Number::simplify);
+
+    match cur_num_head {
+        Some(Number::Real(num)) if !num.is_exact_one() => {
+            if num.is_zero() {
+                if non_commuting_terms.len() == 1
+                    && let Exp::Matrix(mat) = non_commuting_terms.pop().unwrap()
+                {
+                    new_terms.push(linalg::Matrix::filled(num.into(), mat.size()).into());
+                } else {
+                    new_terms.push(num.into());
+                    new_terms.append(&mut non_commuting_terms);
+                }
+                return Ok(new_terms);
             } else {
                 new_terms.push(num.into());
-                new_terms.append(&mut non_commuting_terms);
             }
-            return Ok(new_terms);
-        } else {
-            new_terms.push(num.into());
         }
+        Some(Number::Complex(num)) => new_terms.push(num.into()),
+        _ => (),
     }
 
-    for (term, pow) in leftovers
-        .into_iter()
-        .filter(|(_, pow)| !pow.is_exact_zero())
-    {
-        let full_term = if pow.is_exact_one() {
-            term
-        } else {
-            Exp::Dyadic {
+    for (term, mut pow) in leftovers.into_iter() {
+        pow = pow.simplify();
+        let full_term = match pow {
+            Number::Real(num) => {
+                if num.is_exact_zero() {
+                    continue;
+                } else if num.is_exact_one() {
+                    term
+                } else {
+                    Exp::Dyadic {
+                        op: DyadicOp::Pow,
+                        left: term.into(),
+                        right: Exp::Real(num).into(),
+                    }
+                }
+            }
+            Number::Complex(num) => Exp::Dyadic {
                 op: DyadicOp::Pow,
                 left: term.into(),
-                right: Exp::Number(pow).into(),
-            }
+                right: Exp::Complex(num).into(),
+            },
         };
         new_terms.push(full_term);
     }

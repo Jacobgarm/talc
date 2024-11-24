@@ -11,11 +11,14 @@ pub use procedures::*;
 pub mod numeric;
 pub use numeric::*;
 
+pub mod complex;
+pub use complex::*;
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Exp {
-    Number(Numeric),
+    Real(RealNum),
+    Complex(ComplexNum),
     Bool(bool),
-    ImagUnit,
     Inf,
     Var {
         name: String,
@@ -50,14 +53,15 @@ pub enum Exp {
 }
 
 impl Exp {
-    pub const ZERO: Self = Self::Number(Numeric::ZERO_INT);
-    pub const ONE: Self = Self::Number(Numeric::ONE_INT);
-    pub const NEGATIVE_ONE: Self = Self::Number(Numeric::NEGATIVE_ONE_INT);
+    pub const ZERO: Self = Self::Real(RealNum::ZERO_INT);
+    pub const ONE: Self = Self::Real(RealNum::ONE_INT);
+    pub const NEGATIVE_ONE: Self = Self::Real(RealNum::NEGATIVE_ONE_INT);
 
+    // No fields are Exps
     pub fn is_atomic(&self) -> bool {
         use Exp::*;
         match self {
-            Number(..) | Bool(..) | ImagUnit | Inf | Var { .. } => true,
+            Real(..) | Complex(..) | Bool(..) | Inf | Var { .. } => true,
             Unary { .. }
             | Dyadic { .. }
             | Pool { .. }
@@ -68,10 +72,11 @@ impl Exp {
         }
     }
 
+    // Valued is a fixed, simple quantity
     pub fn is_simple(&self) -> bool {
         use Exp::*;
         match self {
-            Number(..) | Bool(..) | ImagUnit | Inf => true,
+            Real(..) | Complex(..) | Bool(..) | Inf => true,
             Var { .. }
             | Unary { .. }
             | Dyadic { .. }
@@ -81,6 +86,10 @@ impl Exp {
             | Procedure { .. }
             | Matrix { .. } => false,
         }
+    }
+
+    pub fn is_number(&self) -> bool {
+        matches!(self, Self::Real(..) | Self::Complex(..))
     }
 
     pub fn assoc_combine(op: AssocOp, first: Self, second: Self) -> Self {
@@ -146,7 +155,7 @@ impl Exp {
     {
         use Exp::*;
         match self {
-            Number(..) | Inf | ImagUnit | Var { .. } | Bool(..) => self.clone(),
+            Real(..) | Complex(..) | Inf | Var { .. } | Bool(..) => self.clone(),
             Unary { op, operand } => Unary {
                 op: *op,
                 operand: f(operand).into(),
@@ -186,7 +195,7 @@ impl Exp {
     {
         use Exp::*;
         Ok(match self {
-            Number(..) | Inf | ImagUnit | Var { .. } | Bool(..) => self.clone(),
+            Real(..) | Complex(..) | Inf | Var { .. } | Bool(..) => self.clone(),
             Unary { op, operand } => Unary {
                 op: *op,
                 operand: f(operand)?.into(),

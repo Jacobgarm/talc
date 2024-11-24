@@ -2,7 +2,7 @@ use itertools::Itertools;
 use malachite::num::float::NiceFloat;
 
 use crate::{
-    ast::{Exp, Numeric},
+    ast::{Exp, RealNum},
     context::{ApproxLevel, Context},
 };
 
@@ -32,9 +32,9 @@ pub fn eval_function(
     if ctx.approx_level == ApproxLevel::SmallFloat
         && let Some(float_func) = info.float_func
     {
-        if let Exp::Number(Numeric::Small(num)) = args[0] {
+        if let Exp::Real(RealNum::Small(num)) = args[0] {
             let val = float_func(num.0);
-            return Ok(Numeric::Small(NiceFloat(val)).into());
+            return Ok(RealNum::Small(NiceFloat(val)).into());
         }
     }
 

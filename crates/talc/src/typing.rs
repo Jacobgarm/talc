@@ -13,7 +13,7 @@ pub enum ExpType {
 impl Exp {
     pub fn infer_type(&self, ctx: &Context) -> ExpType {
         match self {
-            Exp::Number(..) | Exp::ImagUnit | Exp::Inf => ExpType::Numeric,
+            Exp::Real(..) | Exp::Complex(..) | Exp::Inf => ExpType::Numeric,
             Exp::Bool(..) => ExpType::Bool,
             Exp::Var { name } => {
                 if let Some(info) = ctx.get_var(name) {

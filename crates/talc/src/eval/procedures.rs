@@ -1,9 +1,7 @@
-use talc_utils::try_int_to_unsigned;
-
 use super::{EvalError, EvalResult, Exp};
 
-use crate::ast::Numeric;
 use crate::ast::ProcedureKind;
+use crate::ast::RealNum;
 use crate::context::ApproxLevel;
 use crate::context::Context;
 use crate::linalg;
@@ -19,7 +17,7 @@ pub fn eval_procedure(kind: ProcedureKind, args: Vec<Vec<Exp>>, ctx: &Context) -
         )),
         PK::DiagonalMatrix => Some(Matrix(linalg::Matrix::diagonal(args[0].to_vec()))),
         PK::IdentityMatrix => {
-            if let Number(Numeric::Integer(int)) = &args[0][0] {
+            if let Real(RealNum::Integer(int)) = &args[0][0] {
                 if int < &0 {
                     return Err(EvalError::ProcedureError(
                         "cannot have negative sized identity matrix".to_owned(),
@@ -37,13 +35,14 @@ pub fn eval_procedure(kind: ProcedureKind, args: Vec<Vec<Exp>>, ctx: &Context) -
         PK::Approximate => {
             let mut new_context = ctx.clone();
             new_context.approx_level = if args[0].len() == 2 {
-                let Exp::Number(Numeric::Integer(ref prec_int)) = args[0][1] else {
+                let Real(RealNum::Integer(ref prec_int)) = args[0][1] else {
                     return Err(EvalError::ProcedureError(format!(
                         "invalid precision {}",
                         args[0][0]
                     )));
                 };
-                let Some(prec) = try_int_to_unsigned(prec_int) else {
+
+                let Ok(prec) = u64::try_from(prec_int) else {
                     return Err(EvalError::ProcedureError(format!(
                         "invalid precision {}",
                         args[0][0]
