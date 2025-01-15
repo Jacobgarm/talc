@@ -18,6 +18,7 @@ pub enum UrSet {
 impl UrSet {
     pub fn is_subset(&self, other: &Self) -> bool {
         use UrSet::*;
+        #[allow(clippy::match_same_arms)]
         match (self, other) {
             (a, b) if a == b => true,
             (Empty, _) => true,

@@ -1,8 +1,9 @@
 use std::{cell::LazyCell, collections::HashMap};
+use strum::{EnumIter, IntoEnumIterator};
 
 use crate::typing::ExpType;
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, EnumIter)]
 pub enum UnaryOp {
     Factorial,
     Abs,
@@ -14,16 +15,6 @@ pub enum UnaryOp {
 }
 
 impl UnaryOp {
-    pub const ALL: [Self; 7] = [
-        Self::Factorial,
-        Self::Abs,
-        Self::Arg,
-        Self::Floor,
-        Self::Ceil,
-        Self::Norm,
-        Self::Not,
-    ];
-
     pub fn symbols(&self) -> (&'static str, &'static str) {
         use UnaryOp::*;
         match self {
@@ -86,17 +77,18 @@ impl Infix {
     pub fn precedence_associativity(prec: u8) -> Associativity {
         #![allow(clippy::manual_range_patterns)]
         match prec {
-            0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 => Associativity::Left,
+            0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 11 => Associativity::Left,
             10 => Associativity::Right,
             _ => unreachable!(),
         }
     }
 }
 
-#[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, EnumIter)]
 pub enum DyadicOp {
     Mod,
     Pow,
+    Index,
 
     CrossProd,
     DotProd,
@@ -109,17 +101,6 @@ pub enum DyadicOp {
 }
 
 impl DyadicOp {
-    pub const ALL: [Self; 8] = [
-        Self::Mod,
-        Self::Pow,
-        Self::CrossProd,
-        Self::DotProd,
-        Self::LogicImplies,
-        Self::LogicEquiv,
-        Self::SetDifference,
-        Self::SymDifference,
-    ];
-
     pub const COMMUTATIVES: [Self; 3] = [Self::DotProd, Self::LogicEquiv, Self::SymDifference];
 
     pub fn is_commutative(self) -> bool {
@@ -141,6 +122,7 @@ impl DyadicOp {
             Mod => 8, // Multiplication
             DotProd | CrossProd => 9,
             Pow => 10,
+            Index => 11,
         }
     }
 
@@ -149,8 +131,9 @@ impl DyadicOp {
         match self {
             Mod => '%',
             Pow => '^',
+            Index => '_',
             CrossProd => '×',
-            DotProd => '∙',
+            DotProd => '⋅',
 
             LogicImplies => '⇒',
             LogicEquiv => '⇔',
@@ -161,7 +144,7 @@ impl DyadicOp {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter)]
 pub enum AssocOp {
     Add,
     Mul,
@@ -173,16 +156,6 @@ pub enum AssocOp {
 }
 
 impl AssocOp {
-    pub const ALL: [Self; 7] = [
-        Self::Add,
-        Self::Mul,
-        Self::Union,
-        Self::Intersection,
-        Self::LogicAnd,
-        Self::LogicOr,
-        Self::LogicXor,
-    ];
-
     pub fn symbol(self) -> char {
         use AssocOp::*;
         match self {
@@ -214,13 +187,12 @@ impl AssocOp {
         match self {
             LogicOr | LogicXor | LogicAnd => &[ExpType::Bool],
             Union | Intersection => &[ExpType::Set],
-            Add => &[ExpType::Numeric, ExpType::Matrix],
-            Mul => &[ExpType::Numeric, ExpType::Matrix],
+            Add | Mul => &[ExpType::Numeric, ExpType::Matrix],
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter)]
 pub enum Relation {
     Eq,
     Neq,
@@ -239,21 +211,6 @@ pub enum Relation {
 }
 
 impl Relation {
-    pub const ALL: [Self; 12] = [
-        Self::Eq,
-        Self::Neq,
-        Self::Approx,
-        Self::Lt,
-        Self::Gt,
-        Self::Leq,
-        Self::Geq,
-        Self::Elem,
-        Self::Subset,
-        Self::Superset,
-        Self::SubsetEq,
-        Self::SupersetEq,
-    ];
-
     pub fn symbol(self) -> char {
         use Relation::*;
         match self {
@@ -284,13 +241,13 @@ impl Relation {
 thread_local! {
     static CHAR_INFIX_MAP: LazyCell<HashMap<char, Infix>> = LazyCell::new(||{
         let mut map = HashMap::new();
-        for op in DyadicOp::ALL {
+        for op in DyadicOp::iter() {
             map.insert(op.symbol(), Infix::Dyadic(op));
         }
-        for op in AssocOp::ALL {
+        for op in AssocOp::iter() {
             map.insert(op.symbol(), Infix::Assoc(op));
         }
-        for op in Relation::ALL {
+        for op in Relation::iter() {
             map.insert(op.symbol(), Infix::Relation(op));
         }
         map.insert('-', Infix::Assoc(AssocOp::Add));
@@ -300,5 +257,5 @@ thread_local! {
     );
 }
 pub fn infix_from_char(c: char) -> Option<Infix> {
-    CHAR_INFIX_MAP.with(|map| map.get(&c).cloned())
+    CHAR_INFIX_MAP.with(|map| map.get(&c).copied())
 }

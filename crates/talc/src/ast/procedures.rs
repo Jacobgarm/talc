@@ -81,13 +81,16 @@ impl ProcedureKind {
     pub fn description(self) -> &'static str {
         use ProcedureKind::*;
         match self {
-            Approximate => "Approximates the given expression. If precision is specified, calculates the value to at least that many digits",
-            _ => ""
+            Approximate => {
+                "Approximates the given expression. If precision is specified, calculates the value to at least that many digits"
+            }
+            _ => "",
         }
     }
 
     pub fn signature(self) -> &'static [&'static [&'static str]] {
         use ProcedureKind::*;
+        #[allow(clippy::match_same_arms)]
         match self {
             Approximate => &[&["exp"], &["[precision"]],
             Assuming => &[&["exp"], &["assumption_1", "..."]],
@@ -113,8 +116,8 @@ impl ProcedureKind {
             ],
             DiagonalMatrix => &[&["entry_1", "..."]],
             IdentityMatrix => &[&["size"]],
-            Gradient => &[&["exp", "[eval_point"]],
-            Hessian => &[&["exp", "[eval_point"]],
+            Gradient => &[&["exp", "[eval_point"], &["[var_1", "..."]],
+            Hessian => &[&["exp", "[eval_point"], &["[var_1", "..."]],
             Jacobian => &[&["exp", "[eval_point"]],
             EvalDefaultContext => &[&["exp"]],
         }

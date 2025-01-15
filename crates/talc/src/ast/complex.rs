@@ -16,6 +16,20 @@ impl ComplexNum {
         Self { real, imag }
     }
 
+    pub fn from_real(real: RealNum) -> Self {
+        Self {
+            real,
+            imag: RealNum::ZERO_INT,
+        }
+    }
+
+    pub fn from_imag(imag: RealNum) -> Self {
+        Self {
+            real: RealNum::ZERO_INT,
+            imag,
+        }
+    }
+
     pub fn is_zero(&self) -> bool {
         self.real.is_zero() && self.imag.is_zero()
     }
@@ -30,6 +44,14 @@ impl ComplexNum {
 
     pub fn is_exact_real(&self) -> bool {
         self.imag.is_exact_zero()
+    }
+
+    pub fn is_imag(&self) -> bool {
+        self.real.is_zero()
+    }
+
+    pub fn is_exact_imag(&self) -> bool {
+        self.real.is_exact_zero()
     }
 }
 

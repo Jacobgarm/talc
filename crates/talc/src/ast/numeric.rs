@@ -3,7 +3,7 @@ use malachite::num::basic::traits::{NegativeOne, One, Zero};
 use malachite::num::conversion::traits::RoundingFrom;
 use malachite::num::float::NiceFloat;
 use malachite::rounding_modes::RoundingMode;
-use malachite::{Integer, Rational};
+use malachite::{Integer, Natural, Rational};
 use malachite_float::{ComparableFloat, Float};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -73,6 +73,7 @@ impl RealNum {
         }
     }
 
+    #[must_use]
     pub fn smallify(self) -> Self {
         let val = match self {
             Integer(int) => f64::rounding_from(&int, RoundingMode::Nearest).0,
@@ -83,28 +84,32 @@ impl RealNum {
         Small(NiceFloat(val))
     }
 
+    #[must_use]
     pub fn bigify(self, prec: u64) -> Self {
         let val = match self {
             Integer(int) => Float::from_integer_min_prec(int),
             Rational(rat) => Float::from_rational_prec(rat, prec).0,
             Big(_) => return self,
-            Small(float) => todo!(),
+            Small(_float) => todo!(),
         };
         Big(ComparableFloat(val))
     }
 
+    #[must_use]
     pub fn rationalify(self) -> Self {
         let val = match self {
             Integer(int) => Rational::from_integers(int, Integer::ONE),
             Rational(_) => return self,
-            Big(float) => todo!(),
-            Small(float) => todo!(),
+            Big(_float) => todo!(),
+            Small(_float) => todo!(),
         };
         Rational(val)
     }
 
+    #[must_use]
     pub fn powi(&self, pow: i64) -> Self {
         match self {
+            #[allow(clippy::cast_sign_loss)]
             Integer(int) if pow >= 0 => Self::Integer(int.pow(pow as u64)),
             Integer(int) => Self::Rational(Rational::from(int).pow(pow)),
             Rational(rat) => Self::Rational(rat.pow(pow)),
@@ -112,11 +117,20 @@ impl RealNum {
         }
     }
 
+    #[must_use]
     pub fn euclid_mod(&self, rhs: &Self) -> Self {
         match most_precise_first(self, rhs) {
             (Self::Integer(a), Self::Integer(b)) => Self::Integer(((a % b) + b) % b),
             _ => todo!(),
         }
+    }
+
+    pub fn from_primitive_float(num: f64) -> Self {
+        Self::Small(NiceFloat(num))
+    }
+
+    pub fn try_primitive_float(num: f64) -> Self {
+        Self::Small(NiceFloat(num))
     }
 }
 
@@ -257,6 +271,24 @@ impl std::ops::Mul for RealNum {
     }
 }
 
+impl std::cmp::PartialOrd for RealNum {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl std::cmp::Ord for RealNum {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match common_form(self.clone(), other.clone()) {
+            (Integer(a), Integer(b)) => a.cmp(&b),
+            (Rational(a), Rational(b)) => a.cmp(&b),
+            (Big(a), Big(b)) => a.cmp(&b),
+            (Small(a), Small(b)) => a.cmp(&b),
+            _ => unreachable!(),
+        }
+    }
+}
+
 impl TryFrom<RealNum> for Integer {
     type Error = &'static str;
 
@@ -266,6 +298,25 @@ impl TryFrom<RealNum> for Integer {
             Rational(rat) if rat.denominator_ref() == &1 => Ok(rat.into_numerator().into()),
             _ => Err("not integer"),
         }
+    }
+}
+
+impl TryFrom<RealNum> for Natural {
+    type Error = &'static str;
+
+    fn try_from(value: RealNum) -> Result<Self, Self::Error> {
+        let int: Integer = value.try_into()?;
+        let nat: Natural = int.try_into().map_err(|_| "not natural")?;
+        Ok(nat)
+    }
+}
+
+impl TryFrom<RealNum> for usize {
+    type Error = &'static str;
+
+    fn try_from(value: RealNum) -> Result<Self, Self::Error> {
+        let nat: Natural = value.try_into()?;
+        usize::try_from(&nat).map_err(|_| "exceeds size of usize")
     }
 }
 

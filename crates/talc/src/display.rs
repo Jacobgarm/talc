@@ -1,19 +1,22 @@
 use itertools::Itertools;
-use malachite::{num::arithmetic::traits::IsPowerOf2, Natural};
+use lazy_regex::regex_is_match;
+use malachite::{Natural, num::arithmetic::traits::IsPowerOf2};
 use std::{borrow::Borrow, fmt::Display};
+use talc_utils::raise_superscript;
 
 use crate::ast::{AssocOp, ComplexNum, DyadicOp, Exp, ProcedureKind, RealNum};
 
 #[derive(Debug, Clone, Copy)]
 pub struct PrintOptions {
     pub decimal_rationals: bool,
+    pub unicode_exponents: bool,
 }
 
-#[allow(clippy::derivable_impls)]
 impl Default for PrintOptions {
     fn default() -> Self {
         Self {
             decimal_rationals: false,
+            unicode_exponents: true,
         }
     }
 }
@@ -34,7 +37,7 @@ impl RealNum {
                 if opts.decimal_rationals && is_power_of_2_and_5(frac.denominator_ref()) {
                     let (before, after) = frac.to_digits(&Natural::from(10u64));
                     let after = after.into_vecs().0;
-                    let mut s = before.into_iter().join("");
+                    let mut s = before.into_iter().rev().join("");
                     if s.is_empty() {
                         s.push('0');
                     }
@@ -103,10 +106,22 @@ fn is_enclosed(exp: &Exp) -> bool {
         Exp::Unary { op, .. } => op.is_wrapping(),
         // RelationChains and pools with single terms are still considered unenclosed, to make them
         // more obvious
-        Exp::Complex(..) | Exp::Dyadic { .. } | Exp::RelationChain { .. } | Exp::Pool { .. } => {
-            false
+        Exp::Dyadic { .. }
+        | Exp::RelationChain { .. }
+        | Exp::Pool { .. }
+        | Exp::Real(RealNum::Rational(..)) => false,
+        Exp::Complex(num) => {
+            if num.is_real() {
+                matches!(
+                    num.real,
+                    RealNum::Integer(..) | RealNum::Small(..) | RealNum::Big(..)
+                )
+            } else if num.is_imag() {
+                num.imag.is_one()
+            } else {
+                false
+            }
         }
-        Exp::Real(RealNum::Rational(..)) => false,
 
         _ => true,
     }
@@ -115,7 +130,19 @@ fn is_enclosed(exp: &Exp) -> bool {
 fn infix_precedence(exp: &Exp) -> Option<u8> {
     match exp {
         Exp::Real(RealNum::Rational(..)) => Some(AssocOp::Mul.precedence()),
-        Exp::Complex(..) => Some(AssocOp::Add.precedence()),
+        Exp::Complex(num) => {
+            if num.is_real() {
+                if matches!(num.real, RealNum::Rational(..)) {
+                    Some(AssocOp::Mul.precedence())
+                } else {
+                    None
+                }
+            } else if num.is_imag() && num.imag.is_one() {
+                None
+            } else {
+                Some(AssocOp::Mul.precedence())
+            }
+        }
         Exp::Dyadic { op, .. } => Some(op.precedence()),
         Exp::RelationChain { rels, .. } => rels.first().map(|rel| rel.precedence()),
         Exp::Pool { op, .. } => Some(op.precedence()),
@@ -177,12 +204,20 @@ impl Exp {
 
                 let right_str = right.to_string_opts(opts);
 
+                if opts.unicode_exponents
+                    && *op == DyadicOp::Pow
+                    && regex_is_match!(r"^[-0123456789]+$", &right_str)
+                {
+                    let exponent_str = raise_superscript(&right_str);
+                    return format!("{left_str}{exponent_str}");
+                }
+
                 let wrap_right = infix_precedence(right).is_some_and(|sub_prec| sub_prec <= prec)
-                    || right_str.starts_with("-");
+                    || right_str.starts_with('-');
 
                 let right_str = wrap_if(&right_str, wrap_right);
 
-                let tight = *op == DyadicOp::Pow;
+                let tight = matches!(op, DyadicOp::Pow | DyadicOp::Index);
 
                 if tight {
                     format!("{left_str}{}{right_str}", op.symbol())
@@ -269,7 +304,10 @@ impl Exp {
                 let primes_str = if args.len() == 1 {
                     "'".repeat(primes.len())
                 } else {
-                    primes.iter().map(|index| format!("'{index}")).join("")
+                    primes
+                        .iter()
+                        .map(|index| format!("'{}", raise_superscript(&index.to_string())))
+                        .join("")
                 };
                 format!("{name}{primes_str}({args_str})")
             }
@@ -277,6 +315,13 @@ impl Exp {
                 let name = kind.to_string();
                 let args_str = join_nested(args, opts);
                 format!("{name}[{args_str}]")
+            }
+            Tuple(entries) => {
+                let entries_str = entries
+                    .iter()
+                    .map(|arg| arg.to_string_opts(opts))
+                    .join(", ");
+                format!("({entries_str})")
             }
             Matrix(mat) => {
                 if mat.width() == 1 && mat.height() > 1 {
@@ -323,7 +368,7 @@ impl Exp {
                 for row in rows_str {
                     s.push('│');
                     for (entry, width) in row.iter().zip_eq(column_widths.iter()) {
-                        s.push_str(&format!(" {:^w$} ", entry, w = width));
+                        s.push_str(&format!(" {entry:^width$} "));
                     }
                     s.push('│');
                     s.push('\n');

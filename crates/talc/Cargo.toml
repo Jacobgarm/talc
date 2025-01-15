@@ -16,3 +16,7 @@ malachite-float = { workspace = true }
 bimap = "0.6.3"
 ordermap = "0.5.3"
 codex = {git = "https://github.com/typst/codex.git"}
+memoize = "0.4.2"
+
+[lints]
+workspace = true

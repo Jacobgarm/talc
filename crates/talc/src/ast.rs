@@ -1,6 +1,8 @@
+use std::collections::HashSet;
+
 use itertools::Itertools;
 
-use crate::linalg;
+use crate::{context::Context, linalg};
 
 pub mod operators;
 pub use operators::*;
@@ -14,6 +16,8 @@ pub use numeric::*;
 pub mod complex;
 pub use complex::*;
 
+pub mod substitute;
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Exp {
     Real(RealNum),
@@ -24,20 +28,20 @@ pub enum Exp {
         name: String,
     },
     Unary {
-        op: operators::UnaryOp,
+        op: UnaryOp,
         operand: Box<Exp>,
     },
     Dyadic {
-        op: operators::DyadicOp,
+        op: DyadicOp,
         left: Box<Exp>,
         right: Box<Exp>,
     },
     Pool {
-        op: operators::AssocOp,
+        op: AssocOp,
         terms: Vec<Exp>,
     },
     RelationChain {
-        rels: Vec<operators::Relation>,
+        rels: Vec<Relation>,
         terms: Vec<Exp>,
     },
     Function {
@@ -49,6 +53,7 @@ pub enum Exp {
         kind: ProcedureKind,
         args: Vec<Vec<Exp>>,
     },
+    Tuple(Vec<Exp>),
     Matrix(linalg::Matrix),
 }
 
@@ -57,7 +62,7 @@ impl Exp {
     pub const ONE: Self = Self::Real(RealNum::ONE_INT);
     pub const NEGATIVE_ONE: Self = Self::Real(RealNum::NEGATIVE_ONE_INT);
 
-    // No fields are Exps
+    /// No fields are Exps
     pub fn is_atomic(&self) -> bool {
         use Exp::*;
         match self {
@@ -68,11 +73,12 @@ impl Exp {
             | RelationChain { .. }
             | Function { .. }
             | Procedure { .. }
+            | Tuple(_)
             | Matrix { .. } => false,
         }
     }
 
-    // Valued is a fixed, simple quantity
+    /// Value is independent of context and atomic quantity
     pub fn is_simple(&self) -> bool {
         use Exp::*;
         match self {
@@ -84,6 +90,7 @@ impl Exp {
             | RelationChain { .. }
             | Function { .. }
             | Procedure { .. }
+            | Tuple(_)
             | Matrix { .. } => false,
         }
     }
@@ -185,6 +192,7 @@ impl Exp {
                     .map(|row| row.iter().map(&mut f).collect_vec())
                     .collect_vec(),
             },
+            Tuple(entries) => Tuple(entries.iter().map(|exp| f(exp)).collect()),
             Matrix(mat) => Matrix(mat.map(f)),
         }
     }
@@ -225,7 +233,165 @@ impl Exp {
                     .map(|row| row.iter().map(&mut f).try_collect())
                     .try_collect()?,
             },
+            Tuple(entries) => Tuple(entries.iter().map(|exp| f(exp)).try_collect()?),
             Matrix(mat) => Matrix(mat.try_map(f)?),
         })
+    }
+
+    pub fn reduce<T, F, J, D>(&self, f: F, joiner: J, def: D) -> T
+    where
+        F: Fn(&Self) -> T,
+        J: Fn(T, T) -> T,
+        D: Fn() -> T,
+    {
+        use Exp::*;
+        match self {
+            Real(..) | Complex(..) | Inf | Var { .. } | Bool(..) => def(),
+            Unary { operand, .. } => f(operand),
+            Dyadic { left, right, .. } => joiner(f(left), f(right)),
+            Pool { terms, .. } | RelationChain { terms, .. } => {
+                terms.iter().map(f).reduce(joiner).unwrap_or_else(def)
+            }
+            Function { args, .. } => args.iter().map(f).reduce(joiner).unwrap_or_else(def),
+            Procedure { args, .. } => args
+                .iter()
+                .flatten()
+                .map(f)
+                .reduce(joiner)
+                .unwrap_or_else(def),
+            Tuple(entries) => entries.iter().map(f).reduce(joiner).unwrap_or_else(def),
+            Matrix(mat) => mat.iter_by_rows().map(f).reduce(joiner).unwrap_or_else(def),
+        }
+    }
+
+    pub fn contains(&self, sub_exp: &Exp) -> bool {
+        if self == sub_exp {
+            true
+        } else {
+            self.reduce(|exp| exp.contains(sub_exp), |a, b| a || b, || false)
+        }
+    }
+
+    pub fn all_vars(&self) -> HashSet<String> {
+        if let Self::Var { name } = self {
+            HashSet::from([name.clone()])
+        } else {
+            self.reduce(Self::all_vars, |a, b| &a | &b, HashSet::new)
+        }
+    }
+
+    pub fn vars(&self) -> HashSet<String> {
+        use ProcedureKind as PK;
+        let vs = |exp: &Exp| exp.reduce(Self::vars, |a, b| &a | &b, HashSet::new);
+        match self {
+            Self::Var { name } => HashSet::from([name.clone()]),
+            Self::Procedure {
+                kind: PK::Isolate,
+                args,
+            } => vs(&args[0][0]),
+            exp => vs(exp),
+        }
+    }
+
+    pub fn functions(&self) -> HashSet<String> {
+        let mut funcs = self.reduce(Self::functions, |a, b| &a | &b, HashSet::new);
+        if let Self::Function { name, .. } = self {
+            funcs.insert(name.clone());
+        }
+        funcs
+    }
+
+    pub fn depends_on_var(&self, var: &str, ctx: &Context) -> bool {
+        match self {
+            Self::Var { name } => {
+                return if name == var {
+                    true
+                } else if let Some(var_info) = ctx.get_var(name) {
+                    var_info.exp.depends_on_var(var, ctx)
+                } else {
+                    false
+                };
+            }
+            Self::Function { name, .. } => {
+                if let Some(func_info) = ctx.get_func(name) {
+                    if let Some(exp) = &func_info.exp {
+                        if exp.depends_on_var(var, ctx) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            _ => (),
+        }
+        self.reduce(|exp| exp.depends_on_var(var, ctx), |a, b| a || b, || false)
+    }
+
+    pub fn depends_on(&self, exp: &Exp, ctx: &Context) -> bool {
+        if self == exp {
+            return true;
+        }
+        match self {
+            Self::Var { name } => {
+                return if let Some(var_info) = ctx.get_var(name) {
+                    var_info.exp.depends_on(exp, ctx)
+                } else {
+                    false
+                };
+            }
+            Self::Function { name, .. } => {
+                if let Some(func_info) = ctx.get_func(name) {
+                    if let Some(exp) = &func_info.exp {
+                        if exp.depends_on(exp, ctx) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            _ => (),
+        }
+        self.reduce(|e| e.depends_on(exp, ctx), |a, b| a || b, || false)
+    }
+
+    pub fn pow(self, exponent: Self) -> Self {
+        Self::Dyadic {
+            op: DyadicOp::Pow,
+            left: self.into(),
+            right: exponent.into(),
+        }
+    }
+}
+
+impl std::ops::Add for Exp {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self::Output {
+        Self::assoc_combine(AssocOp::Add, self, rhs)
+    }
+}
+
+impl std::ops::Neg for Exp {
+    type Output = Self;
+    fn neg(self) -> Self::Output {
+        Self::assoc_combine(AssocOp::Mul, Self::NEGATIVE_ONE, self)
+    }
+}
+
+impl std::ops::Sub for Exp {
+    type Output = Self;
+    fn sub(self, rhs: Self) -> Self::Output {
+        self + (-rhs)
+    }
+}
+
+impl std::ops::Mul for Exp {
+    type Output = Self;
+    fn mul(self, rhs: Self) -> Self::Output {
+        Self::assoc_combine(AssocOp::Mul, self, rhs)
+    }
+}
+
+impl std::ops::Div for Exp {
+    type Output = Self;
+    fn div(self, rhs: Self) -> Self::Output {
+        Self::assoc_combine(AssocOp::Mul, self, rhs.pow(Self::NEGATIVE_ONE))
     }
 }

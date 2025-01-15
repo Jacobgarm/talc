@@ -11,8 +11,14 @@ name = "talc"
 path = "src/main.rs"
 
 [dependencies]
-talc = { workspace = true}
+talc = { workspace = true }
+talc-utils = { workspace = true }
+talc-plot = { workspace = true }
 itertools = { workspace = true }
 lazy-regex = { workspace = true }
 strum = { workspace = true }
 rustyline = { version = "15.0.0", features = ["derive"] }
+open = "5.3.1"
+
+[lints]
+workspace = true

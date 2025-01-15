@@ -1,14 +1,16 @@
 use std::{char, cmp::Ordering, collections::HashMap, fmt::Display, str::FromStr};
 
 use itertools::Itertools;
-use lazy_regex::{regex, regex_captures, regex_is_match, regex_replace_all};
-use malachite::{num::conversion::traits::FromSciString, Integer, Rational};
-use operators::{infix_from_char, Infix};
+use lazy_regex::{regex, regex_captures, regex_is_match, regex_replace, regex_replace_all};
+use malachite::{Integer, Rational, num::conversion::traits::FromSciString};
+use strum::IntoEnumIterator;
+use talc_utils::lower_superscript;
 
 use crate::ast::*;
+use operators::{Infix, infix_from_char};
 
 pub fn is_valid_identifier(s: &str) -> bool {
-    regex_is_match!(r"^\p{L}[\p{L}0-9_]*$", s)
+    regex_is_match!(r"^\p{L}[\p{L}0-9]*$", s)
 }
 
 pub fn get_unicode_replacement(name: &str) -> Option<char> {
@@ -45,12 +47,12 @@ pub fn get_unicode_replacement(name: &str) -> Option<char> {
     }
 }
 
-pub fn preparse(subject: String) -> String {
+pub fn preparse(subject: &str) -> String {
     // Replace names fore unicode characters with the characters using codex
     let identifier = regex!(r"[a-zA-Z]+(?:\.[a-zA-Z]+)*");
     let mut byte_offset = 0;
-    let mut s = subject.clone();
-    for hit in identifier.find_iter(&subject) {
+    let mut s = subject.to_owned();
+    for hit in identifier.find_iter(subject) {
         let front = &subject[..hit.start()];
         let back = &subject[hit.end()..];
         if regex_is_match!(r".*[\w\.]$", front) || regex_is_match!(r"^[\[\w\.].*", back) {
@@ -65,6 +67,19 @@ pub fn preparse(subject: String) -> String {
             byte_offset -= hit.len() as isize - replacement.len_utf8() as isize;
         }
     }
+
+    // Lower prime superscripts
+    s = regex_replace_all!(r"'[⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻]+", &s, |hit| {
+        lower_superscript(hit)
+    })
+    .to_string();
+
+    // Superscripts to powers
+    s = regex_replace_all!(r"[⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻]+", &s, |hit| format!(
+        "^({})",
+        lower_superscript(hit)
+    ))
+    .to_string();
 
     // Replacement symbols
     let symbols = [
@@ -90,9 +105,9 @@ pub fn preparse(subject: String) -> String {
 
     // Number next to parentheses
     s = regex_replace_all!(
-        r"(?<pre>(?:^|\W)[0-9]+(?:.[0-9]+)?)(?<post>\()",
+        r"(?<pre>(?:^|[^\w'])[0-9]+(?:.[0-9]+)?)(?<post>\()",
         &s,
-        |_, pre, post| format!("{}*{}", pre, post),
+        |_, pre, post| format!("{pre}*{post}"),
     )
     .to_string();
 
@@ -100,14 +115,13 @@ pub fn preparse(subject: String) -> String {
     s = regex_replace_all!(
         r"(?<pre>(?:^|\W)[0-9]+(?:.[0.9]+)?)(?<post>\p{L})",
         &s,
-        |_, pre, post| format!("{}*{}", pre, post),
+        |_, pre, post| format!("{pre}*{post}"),
     )
     .to_string();
 
     // Parenthesis next to variable or number
     s = regex_replace_all!(r"(?<pre>\))(?<post>\p{L})", &s, |_, pre, post| format!(
-        "{}*{}",
-        pre, post
+        "{pre}*{post}",
     ),)
     .to_string();
 
@@ -133,11 +147,20 @@ impl std::error::Error for ParseExpError {}
 
 impl ParseExpError {
     pub fn pretty_print(self, subject: &str) {
-        println!("{}", subject);
-        dbg!(self);
+        println!("Parsing error: {}\n", self.message);
+        println!("  {subject}");
+        if self.start == self.end {
+            let spaces = 1 + subject[..self.start].chars().count();
+            println!("{}/\\", " ".repeat(spaces));
+        } else {
+            let spaces = 2 + subject[..self.start].chars().count();
+            let tildes = subject[self.start..self.end].chars().count();
+            println!("{}{}", " ".repeat(spaces), "~".repeat(tildes));
+        }
     }
 }
 
+#[allow(clippy::type_complexity)]
 pub fn split_at_least_precedent(subject: &str) -> Option<(Vec<&str>, Vec<(char, Infix)>)> {
     let group_pairs = HashMap::from([
         ('(', ')'),
@@ -188,7 +211,8 @@ pub fn split_at_least_precedent(subject: &str) -> Option<(Vec<&str>, Vec<(char, 
     Some((terms, ops))
 }
 
-pub fn parse_arguments(args_string: &str, start: usize) -> ParseResult<Vec<Vec<Exp>>> {
+/// Splits a string at unenclosed ',' and ';' and parses each chunk
+pub fn parse_separated(subject: &str, start: usize) -> ParseResult<Vec<Vec<Exp>>> {
     let group_pairs = HashMap::from([
         ('(', ')'),
         ('[', ']'),
@@ -204,17 +228,13 @@ pub fn parse_arguments(args_string: &str, start: usize) -> ParseResult<Vec<Vec<E
     let mut group_stack = Vec::new();
     let mut next_term_start = 0;
 
-    for (index, c) in args_string.char_indices() {
+    for (index, c) in subject.char_indices() {
         if group_stack.last().is_some_and(|ender| *ender == c) {
             group_stack.pop();
         } else if let Some(ender) = group_pairs.get(&c) {
             group_stack.push(*ender);
-        } else if 0 < index
-            && index < args_string.len()
-            && group_stack.is_empty()
-            && ",;".contains(c)
-        {
-            let sub = &args_string[next_term_start..index];
+        } else if 0 < index && index < subject.len() && group_stack.is_empty() && ",;".contains(c) {
+            let sub = &subject[next_term_start..index];
             let arg = parse_bounded(sub, start + next_term_start)?;
             current_sub_args.push(arg);
             if c == ';' {
@@ -225,8 +245,8 @@ pub fn parse_arguments(args_string: &str, start: usize) -> ParseResult<Vec<Vec<E
         }
     }
 
-    if next_term_start < args_string.len() {
-        let tail = &args_string[next_term_start..];
+    if next_term_start < subject.len() {
+        let tail = &subject[next_term_start..];
         let arg = parse_bounded(tail, start + next_term_start)?;
         current_sub_args.push(arg);
     }
@@ -255,7 +275,7 @@ pub fn parse_primes(primes_str: &str, num_args: usize, start: usize) -> ParseRes
         }
     } else {
         let mut primes = Vec::new();
-        for s in primes_str.split("'") {
+        for s in primes_str.split('\'') {
             if s.is_empty() {
                 continue;
             }
@@ -283,7 +303,7 @@ pub fn parse_primes(primes_str: &str, num_args: usize, start: usize) -> ParseRes
                 });
             }
 
-            primes.push(num)
+            primes.push(num);
         }
         Ok(primes)
     }
@@ -295,13 +315,13 @@ pub fn parse_function(
     args_string: &str,
     start: usize,
 ) -> ParseResult<Exp> {
-    let args = parse_arguments(args_string, start)?;
+    let args = parse_separated(args_string, start)?;
     let args = args.into_iter().flatten().collect_vec();
 
-    let primes = if !primes.is_empty() {
-        parse_primes(primes, args.len(), start + name.len())?
+    let primes = if primes.is_empty() {
+        Vec::with_capacity(0)
     } else {
-        Vec::new()
+        parse_primes(primes, args.len(), start + name.len())?
     };
 
     Ok(Exp::Function {
@@ -312,7 +332,7 @@ pub fn parse_function(
 }
 
 pub fn parse_procedure(name: &str, args_string: &str, start: usize) -> ParseResult<Exp> {
-    let args = parse_arguments(args_string, start)?;
+    let args = parse_separated(args_string, start)?;
 
     let Ok(kind) = ProcedureKind::from_str(name) else {
         return Err(ParseExpError {
@@ -383,7 +403,7 @@ fn parse_bounded(subject: &str, start: usize) -> ParseResult<Exp> {
 
             match op_char {
                 '-' => {
-                    parsed = Exp::assoc_combine(operators::AssocOp::Mul, Exp::NEGATIVE_ONE, parsed)
+                    parsed = Exp::assoc_combine(operators::AssocOp::Mul, Exp::NEGATIVE_ONE, parsed);
                 }
                 '/' => {
                     parsed = Exp::Dyadic {
@@ -424,18 +444,25 @@ fn parse_bounded(subject: &str, start: usize) -> ParseResult<Exp> {
 
     // Functions
     if let Some((_, name, primes, insides)) =
-        regex_captures!(r"^(\p{L}[\p{L}_0-9]*)(['0-9]*)\((.*)\)$", subject)
+        regex_captures!(r"^(\p{L}[\p{L}0-9]*)(['0-9]*)\((.*)\)$", subject)
     {
         return parse_function(name, primes, insides, start);
     }
 
     // Procedures
-    if let Some((_, name, insides)) = regex_captures!(r"^(\p{L}[\p{L}_0-9]*)\[(.*)\]$", subject) {
+    if let Some((_, name, insides)) = regex_captures!(r"^(\p{L}[\p{L}0-9]*)\[(.*)\]$", subject) {
         return parse_procedure(name, insides, start);
     }
 
-    if subject.starts_with("(") && subject.ends_with(")") {
-        return parse_bounded(&subject[1..subject.len() - 1], start + 1);
+    // Parentheses
+    if subject.starts_with('(') && subject.ends_with(')') {
+        let chunks = parse_separated(&subject[1..subject.len() - 1], start + 1)?;
+        let mut chunks = chunks.into_iter().flatten().collect_vec();
+        return Ok(if chunks.len() == 1 {
+            chunks.pop().unwrap()
+        } else {
+            Exp::Tuple(chunks)
+        });
     }
 
     //Literals
@@ -456,7 +483,7 @@ fn parse_bounded(subject: &str, start: usize) -> ParseResult<Exp> {
     }
 
     //Variables
-    if regex_is_match!(r"^\p{L}[\p{L}0-9_]*$", subject) {
+    if regex_is_match!(r"^\p{L}[\p{L}0-9]*$", subject) {
         return Ok(Exp::Var {
             name: subject.to_owned(),
         });
@@ -482,7 +509,7 @@ fn parse_bounded(subject: &str, start: usize) -> ParseResult<Exp> {
     }
 
     // Unary operators
-    for op in UnaryOp::ALL {
+    for op in UnaryOp::iter() {
         let (pre, post) = op.symbols();
         if let Some(sub) = subject.strip_prefix(pre).and_then(|s| s.strip_suffix(post))
             && !sub.is_empty()
@@ -509,7 +536,7 @@ impl FromStr for Exp {
     type Err = ParseExpError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let preparsed = preparse(s.to_owned());
+        let preparsed = preparse(s);
         parse(&preparsed)
     }
 }
@@ -534,46 +561,16 @@ mod tests {
         let exp1 = parse("a^b^c");
         assert!(exp1.is_ok());
 
-        assert_eq!(
-            exp1.unwrap(),
-            Dyadic {
+        assert_eq!(exp1.unwrap(), Dyadic {
+            op: Pow,
+            left: Var {
+                name: "a".to_owned()
+            }
+            .into(),
+            right: Dyadic {
                 op: Pow,
                 left: Var {
-                    name: "a".to_owned()
-                }
-                .into(),
-                right: Dyadic {
-                    op: Pow,
-                    left: Var {
-                        name: "b".to_owned()
-                    }
-                    .into(),
-                    right: Var {
-                        name: "c".to_owned()
-                    }
-                    .into()
-                }
-                .into()
-            }
-        );
-
-        let exp2 = parse("a%b%c");
-        assert!(exp2.is_ok());
-
-        assert_eq!(
-            exp2.unwrap(),
-            Dyadic {
-                op: Mod,
-                left: Dyadic {
-                    op: Mod,
-                    left: Var {
-                        name: "a".to_owned()
-                    }
-                    .into(),
-                    right: Var {
-                        name: "b".to_owned()
-                    }
-                    .into()
+                    name: "b".to_owned()
                 }
                 .into(),
                 right: Var {
@@ -581,6 +578,30 @@ mod tests {
                 }
                 .into()
             }
-        )
+            .into()
+        });
+
+        let exp2 = parse("a%b%c");
+        assert!(exp2.is_ok());
+
+        assert_eq!(exp2.unwrap(), Dyadic {
+            op: Mod,
+            left: Dyadic {
+                op: Mod,
+                left: Var {
+                    name: "a".to_owned()
+                }
+                .into(),
+                right: Var {
+                    name: "b".to_owned()
+                }
+                .into()
+            }
+            .into(),
+            right: Var {
+                name: "c".to_owned()
+            }
+            .into()
+        });
     }
 }

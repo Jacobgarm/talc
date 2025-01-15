@@ -5,7 +5,7 @@ resolver = "2"
 
 [workspace.package]
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 authors = ["Jacob Garm <jacobgarm@hotmail.dk>"]
 description = "A Computer Algebra System written in Rust"
 repository = "https://github.com/jacobgarm/talc"
@@ -16,11 +16,32 @@ readme = "README.md"
 
 [workspace.dependencies]
 talc = { path = "crates/talc" }
-talc-repl = { path = "crates/talc-repl" }
 talc-utils = { path = "crates/talc-utils" }
 talc-plot = { path = "crates/talc-plot" }
-itertools = "0.13.0"
+itertools = "0.14.0"
 lazy-regex = "3.3.0"
 strum = { version = "0.26.3", features = ["derive"] }
 malachite = { version = "0.4.16", features = ["floats", "malachite-float"] }
 malachite-float = "0.4.16"
+
+[workspace.lints.clippy]
+pedantic = {level = "warn", priority = -1}
+too_many_lines = "allow"
+enum_glob_use = "allow"
+similar_names = "allow"
+must_use_candidate = "allow"
+float_cmp = "allow"
+missing_panics_doc = "allow"
+missing_errors_doc = "allow"
+cast_precision_loss = "allow"
+wildcard_imports = "allow"
+manual_string_new = "allow"
+unnecessary_wraps = "allow"
+cast_possible_wrap = "allow"
+cast_sign_loss = "allow"
+cast_possible_truncation = "allow"
+match_on_vec_items = "allow"
+match_same_arms = "allow"
+
+[workspace.lints.rust]
+dead_code = "allow"

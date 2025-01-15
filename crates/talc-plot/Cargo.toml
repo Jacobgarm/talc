@@ -8,4 +8,9 @@ license.workspace = true
 
 
 [dependencies]
+malachite-float.workspace = true
+plotters = "0.3.7"
 talc = { workspace = true}
+
+[lints]
+workspace = true

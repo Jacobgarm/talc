@@ -3,42 +3,14 @@ use crate::context::{ApproxLevel, Context};
 use crate::typing::ExpType;
 
 mod dyadic;
+mod error;
 mod fold;
 mod functions;
 mod procedures;
 mod relations;
 mod unary;
 
-#[derive(Debug, Clone)]
-pub enum EvalError {
-    DivisionByZero,
-    ModuloByZero,
-    ProcedureError(String),
-    MatrixScalarSum,
-    MatrixSizesIncompatibleAdd {
-        left_size: (usize, usize),
-        right_size: (usize, usize),
-    },
-    MatrixSizesIncompatibleMul {
-        left_size: (usize, usize),
-        right_size: (usize, usize),
-    },
-    PoolWrongTermType {
-        op: AssocOp,
-        ty: crate::typing::ExpType,
-    },
-    NonSquareMatrixPower {
-        size: (usize, usize),
-    },
-    FunctionWrongArgCount {
-        expected: usize,
-        got: usize,
-    },
-
-    Unimplemented,
-}
-
-type EvalResult<T> = Result<T, EvalError>;
+pub use error::*;
 
 impl Exp {
     pub fn eval(&self, ctx: &Context) -> EvalResult<Exp> {
@@ -79,6 +51,16 @@ impl Exp {
             _ => exp,
         })
     }
+
+    pub fn approximate(&self, prec: Option<u64>, ctx: &Context) -> EvalResult<Self> {
+        let mut new_context = ctx.clone();
+        new_context.approx_level = if let Some(val) = prec {
+            ApproxLevel::BigFloat(val)
+        } else {
+            ApproxLevel::SmallFloat
+        };
+        self.eval(&new_context)
+    }
 }
 
 fn eval_real(num: RealNum, ctx: &Context) -> RealNum {
@@ -118,6 +100,9 @@ fn eval_dyadic(op: DyadicOp, left: Exp, right: Exp, ctx: &Context) -> EvalResult
         DyadicOp::LogicImplies => dyadic::eval_implies(left, right, ctx),
         DyadicOp::Mod => dyadic::eval_mod(left, right, ctx),
         DyadicOp::Pow => dyadic::eval_pow(left, right, ctx),
+        DyadicOp::Index => dyadic::eval_index(left, right, ctx),
+        DyadicOp::DotProd => dyadic::eval_dot_product(left, right, ctx),
+        DyadicOp::CrossProd => dyadic::eval_cross_product(left, right, ctx),
         _ => Ok(Exp::Dyadic {
             op,
             left: left.into(),

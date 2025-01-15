@@ -6,6 +6,7 @@ use crate::ast::{AssocOp, ComplexNum, DyadicOp, Exp, RealNum, UnaryOp};
 use crate::context::Context;
 use crate::eval::{EvalError, EvalResult};
 use crate::linalg::{self, Matrix};
+use crate::typing::ExpType;
 
 pub fn flatten_pool(op: AssocOp, terms: Vec<Exp>) -> Vec<Exp> {
     terms
@@ -52,10 +53,10 @@ impl AddAssign<&Number> for Number {
     fn add_assign(&mut self, rhs: &Number) {
         use Number::*;
         *self = match (&self, rhs) {
-            (Real(a), Real(b)) => Real(a + &b),
+            (Real(a), Real(b)) => Real(a + b),
             (Complex(a), Real(b)) => Complex(a + &b.clone().into()),
             (Real(a), Complex(b)) => Complex(&ComplexNum::from(a.clone()) + b),
-            (Complex(a), Complex(b)) => Complex(a + &b),
+            (Complex(a), Complex(b)) => Complex(a + b),
         }
     }
 }
@@ -64,13 +65,13 @@ pub fn add_fold(terms: Vec<Exp>, ctx: &Context) -> EvalResult<Vec<Exp>> {
     use AddHead::*;
 
     if terms.len() <= 1 {
-        return Ok(terms.to_vec());
+        return Ok(terms.clone());
     }
 
     let mut cur_head = AddHead::Empty;
     let mut leftovers = OrderMap::new();
 
-    for term in terms.into_iter() {
+    for term in terms {
         match term {
             Exp::Real(num) => {
                 cur_head = match cur_head {
@@ -97,9 +98,8 @@ pub fn add_fold(terms: Vec<Exp>, ctx: &Context) -> EvalResult<Vec<Exp>> {
                                 left_size: head.size(),
                                 right_size: mat.size(),
                             });
-                        } else {
-                            Mat(head + mat)
                         }
+                        Mat(head + mat)
                     }
                     Real(..) | Complex(..) => return Err(EvalError::MatrixScalarSum),
                 };
@@ -107,7 +107,7 @@ pub fn add_fold(terms: Vec<Exp>, ctx: &Context) -> EvalResult<Vec<Exp>> {
             Exp::Pool {
                 op: AssocOp::Mul,
                 terms: mut mul_terms,
-            } if mul_terms.first().is_some_and(|term| term.is_number()) => {
+            } if mul_terms.first().is_some_and(Exp::is_number) => {
                 let inner_coef = match mul_terms.remove(0) {
                     Exp::Real(num) => Number::Real(num),
                     Exp::Complex(num) => Number::Complex(num),
@@ -144,7 +144,7 @@ pub fn add_fold(terms: Vec<Exp>, ctx: &Context) -> EvalResult<Vec<Exp>> {
         _ => (),
     }
 
-    for (term, mut coef) in leftovers.into_iter() {
+    for (term, mut coef) in leftovers {
         coef = coef.simplify();
         let full_term = match coef {
             Number::Real(num) => {
@@ -177,22 +177,21 @@ pub fn mul_fold(terms: Vec<Exp>, ctx: &Context) -> EvalResult<Vec<Exp>> {
     let mut non_commuting_terms = Vec::new();
     let mut leftovers = OrderMap::new();
 
-    for term in terms.into_iter() {
-        dbg!(&term);
+    for term in terms {
         match term {
             Exp::Real(num) => {
                 cur_num_head = Some(match cur_num_head {
                     None => Number::Real(num),
                     Some(Number::Real(cur)) => Number::Real(cur * num),
                     Some(Number::Complex(cur)) => Number::Complex(cur * num.into()),
-                })
+                });
             }
             Exp::Complex(num) => {
                 cur_num_head = Some(match cur_num_head {
                     None => Number::Complex(num),
                     Some(Number::Real(cur)) => Number::Complex(ComplexNum::from(cur) * num),
                     Some(Number::Complex(cur)) => Number::Complex(cur * num),
-                })
+                });
             }
             Exp::Matrix(mat) => {
                 if let Some(tail) = non_commuting_terms.pop() {
@@ -200,13 +199,13 @@ pub fn mul_fold(terms: Vec<Exp>, ctx: &Context) -> EvalResult<Vec<Exp>> {
                         non_commuting_terms.push((tail_mat * mat).into());
                     } else {
                         non_commuting_terms.push(tail);
-                        non_commuting_terms.push(mat.into())
+                        non_commuting_terms.push(mat.into());
                     }
                 } else {
                     non_commuting_terms.push(mat.into());
                 }
             }
-            exp if exp.infer_type(ctx) == crate::typing::ExpType::Matrix => {
+            exp if exp.infer_type(ctx) == ExpType::Matrix => {
                 non_commuting_terms.push(exp);
             }
             Exp::Dyadic {
@@ -250,15 +249,14 @@ pub fn mul_fold(terms: Vec<Exp>, ctx: &Context) -> EvalResult<Vec<Exp>> {
                     new_terms.append(&mut non_commuting_terms);
                 }
                 return Ok(new_terms);
-            } else {
-                new_terms.push(num.into());
             }
+            new_terms.push(num.into());
         }
         Some(Number::Complex(num)) => new_terms.push(num.into()),
         _ => (),
     }
 
-    for (term, mut pow) in leftovers.into_iter() {
+    for (term, mut pow) in leftovers {
         pow = pow.simplify();
         let full_term = match pow {
             Number::Real(num) => {
@@ -308,13 +306,12 @@ pub fn mul_fold(terms: Vec<Exp>, ctx: &Context) -> EvalResult<Vec<Exp>> {
 pub fn and_or_fold(is_or: bool, terms: Vec<Exp>, _ctx: &Context) -> EvalResult<Vec<Exp>> {
     let mut new_terms: OrderSet<Exp> = OrderSet::new();
 
-    for term in terms.into_iter() {
+    for term in terms {
         if let Exp::Bool(b) = term {
             if b == is_or {
                 return Ok(vec![Exp::Bool(is_or)]);
-            } else {
-                continue;
             }
+            continue;
         }
 
         if let Exp::Unary {
@@ -347,7 +344,7 @@ pub fn xor_fold(terms: Vec<Exp>, _ctx: &Context) -> EvalResult<Vec<Exp>> {
 
     let mut odd_trues = false;
 
-    for term in terms.into_iter() {
+    for term in terms {
         match term {
             Exp::Bool(true) => odd_trues = !odd_trues,
             Exp::Bool(false) => continue,
@@ -383,9 +380,8 @@ pub fn xor_fold(terms: Vec<Exp>, _ctx: &Context) -> EvalResult<Vec<Exp>> {
                 op: UnaryOp::Not,
                 operand: new_new_terms.pop().unwrap().into(),
             }]);
-        } else {
-            new_new_terms.shift_insert(0, Exp::Bool(true));
         }
+        new_new_terms.shift_insert(0, Exp::Bool(true));
     }
 
     if new_new_terms.is_empty() {

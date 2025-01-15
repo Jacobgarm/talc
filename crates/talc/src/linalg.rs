@@ -29,7 +29,7 @@ impl Matrix {
         let mut rows = Vec::new();
         for _ in 0..num_rows {
             let mut row = Vec::new();
-            for col in cols.iter_mut() {
+            for col in &mut cols {
                 let entry = col.pop()?;
                 row.push(entry);
             }
@@ -47,6 +47,14 @@ impl Matrix {
 
     pub fn from_row(row: Vec<Exp>) -> Self {
         Self { rows: vec![row] }
+    }
+
+    pub fn get(&self, index: (usize, usize)) -> Option<&Exp> {
+        if index.0 < self.height() && index.1 < self.width() {
+            Some(&self[index])
+        } else {
+            None
+        }
     }
 
     pub fn filled(exp: Exp, size: (usize, usize)) -> Self {
@@ -77,6 +85,7 @@ impl Matrix {
         self.width() == self.height()
     }
 
+    #[must_use]
     pub fn map<F>(&self, mut f: F) -> Self
     where
         F: FnMut(&Exp) -> Exp,
@@ -103,6 +112,7 @@ impl Matrix {
         })
     }
 
+    #[must_use]
     pub fn scale(&self, exp: &Exp) -> Self {
         self.map(|entry| Exp::assoc_combine(AssocOp::Mul, exp.clone(), entry.clone()))
     }
@@ -115,12 +125,32 @@ impl Matrix {
         &self.rows
     }
 
+    pub fn cols(self) -> Vec<Vec<Exp>> {
+        let mut cols = vec![vec![]; self.width()];
+        for row in self.rows {
+            for (i, exp) in row.into_iter().enumerate() {
+                cols[i].push(exp);
+            }
+        }
+        cols
+    }
+
+    pub fn cols_ref(&self) -> Vec<Vec<&Exp>> {
+        let mut cols = vec![vec![]; self.width()];
+        for row in &self.rows {
+            for (i, exp) in row.iter().enumerate() {
+                cols[i].push(exp);
+            }
+        }
+        cols
+    }
+
     pub fn height(&self) -> usize {
         self.rows.len()
     }
 
     pub fn width(&self) -> usize {
-        self.rows.first().map_or(0, |row| row.len())
+        self.rows.first().map_or(0, Vec::len)
     }
 
     pub fn size(&self) -> (usize, usize) {
@@ -129,6 +159,30 @@ impl Matrix {
 
     pub fn iter_by_rows(&self) -> impl Iterator<Item = &Exp> {
         self.rows_ref().iter().flatten()
+    }
+
+    pub fn into_iter_by_rows(self) -> impl Iterator<Item = Exp> {
+        self.rows.into_iter().flatten()
+    }
+
+    pub fn resize(&mut self, new_size: (usize, usize), value: &Exp) {
+        self.rows.resize(new_size.0, vec![value.clone()]);
+        self.rows
+            .iter_mut()
+            .for_each(|row| row.resize(new_size.1, value.clone()));
+    }
+
+    pub fn scalar_product(self, rhs: Self) -> Exp {
+        let terms = self
+            .into_iter_by_rows()
+            .zip_eq(rhs.into_iter_by_rows())
+            .map(|(a, b)| a * b)
+            .collect_vec();
+
+        Exp::Pool {
+            op: AssocOp::Add,
+            terms,
+        }
     }
 }
 
@@ -143,6 +197,12 @@ impl std::ops::Index<(usize, usize)> for Matrix {
 
     fn index(&self, index: (usize, usize)) -> &Self::Output {
         &self.rows[index.0][index.1]
+    }
+}
+
+impl std::ops::IndexMut<(usize, usize)> for Matrix {
+    fn index_mut(&mut self, index: (usize, usize)) -> &mut Self::Output {
+        &mut self.rows[index.0][index.1]
     }
 }
 
@@ -186,9 +246,7 @@ impl std::ops::Mul for &Matrix {
     fn mul(self, rhs: Self) -> Self::Output {
         let mut rows = Vec::new();
         let common_len = self.width();
-        if common_len != rhs.height() {
-            panic!("incompatible matrix sizes")
-        }
+        assert!(common_len == rhs.height(), "incompatible matrix sizes");
         for i in 0..self.height() {
             let mut row = Vec::new();
             for j in 0..rhs.width() {
@@ -203,7 +261,7 @@ impl std::ops::Mul for &Matrix {
                         })
                         .reduce(|a, b| Exp::assoc_combine(AssocOp::Add, a, b))
                         .expect("empty matrix"),
-                )
+                );
             }
             rows.push(row);
         }
