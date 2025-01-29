@@ -1,6 +1,9 @@
 use itertools::Itertools;
 use lazy_regex::regex_is_match;
-use malachite::{Natural, num::arithmetic::traits::IsPowerOf2};
+use malachite::{
+    Natural,
+    num::{arithmetic::traits::IsPowerOf2, basic::traits::One},
+};
 use std::{borrow::Borrow, fmt::Display};
 use talc_utils::raise_superscript;
 
@@ -101,15 +104,15 @@ fn join_nested(args: &[Vec<Exp>], opts: PrintOptions) -> String {
         .join("; ")
 }
 
-fn is_enclosed(exp: &Exp) -> bool {
+fn is_enclosed(exp: &Exp, opts: PrintOptions) -> bool {
     match exp {
         Exp::Unary { op, .. } => op.is_wrapping(),
         // RelationChains and pools with single terms are still considered unenclosed, to make them
         // more obvious
-        Exp::Dyadic { .. }
-        | Exp::RelationChain { .. }
-        | Exp::Pool { .. }
-        | Exp::Real(RealNum::Rational(..)) => false,
+        Exp::Dyadic { .. } | Exp::RelationChain { .. } | Exp::Pool { .. } => false,
+        Exp::Real(RealNum::Rational(rat)) => {
+            rat.denominator_ref() == &Natural::ONE || opts.decimal_rationals
+        }
         Exp::Complex(num) => {
             if num.is_real() {
                 matches!(
@@ -127,9 +130,15 @@ fn is_enclosed(exp: &Exp) -> bool {
     }
 }
 
-fn infix_precedence(exp: &Exp) -> Option<u8> {
+fn infix_precedence(exp: &Exp, opts: PrintOptions) -> Option<u8> {
     match exp {
-        Exp::Real(RealNum::Rational(..)) => Some(AssocOp::Mul.precedence()),
+        Exp::Real(RealNum::Rational(rat)) => {
+            if rat.denominator_ref() == &Natural::ONE || opts.decimal_rationals {
+                None
+            } else {
+                Some(AssocOp::Mul.precedence())
+            }
+        }
         Exp::Complex(num) => {
             if num.is_real() {
                 if matches!(num.real, RealNum::Rational(..)) {
@@ -180,7 +189,7 @@ impl Exp {
 
                 format!(
                     "{pre}{}{post}",
-                    wrap_if(&operand.to_string_opts(opts), !is_enclosed(operand))
+                    wrap_if(&operand.to_string_opts(opts), !is_enclosed(operand, opts))
                 )
             }
 
@@ -188,13 +197,13 @@ impl Exp {
                 let prec = op.precedence();
 
                 #[allow(clippy::needless_bool)]
-                let wrap_left = if is_enclosed(left) {
+                let wrap_left = if is_enclosed(left, opts) {
                     false
                 } else if let Real(val) = left.borrow()
                     && val.is_negative()
                 {
                     true
-                } else if infix_precedence(left).is_some_and(|sub_prec| sub_prec <= prec) {
+                } else if infix_precedence(left, opts).is_some_and(|sub_prec| sub_prec <= prec) {
                     true
                 } else {
                     false
@@ -212,7 +221,8 @@ impl Exp {
                     return format!("{left_str}{exponent_str}");
                 }
 
-                let wrap_right = infix_precedence(right).is_some_and(|sub_prec| sub_prec <= prec)
+                let wrap_right = infix_precedence(right, opts)
+                    .is_some_and(|sub_prec| sub_prec <= prec)
                     || right_str.starts_with('-');
 
                 let right_str = wrap_if(&right_str, wrap_right);
@@ -236,14 +246,14 @@ impl Exp {
                     Some(num) if *num == Exp::NEGATIVE_ONE && *op == AssocOp::Mul => "-".to_owned(),
                     Some(exp) => wrap_if(
                         &exp.to_string_opts(opts),
-                        infix_precedence(exp).is_some_and(|sub_prec| sub_prec <= prec),
+                        infix_precedence(exp, opts).is_some_and(|sub_prec| sub_prec <= prec),
                     ),
                 };
 
                 for term in terms_iter {
                     let term_str = wrap_if(
                         &term.to_string_opts(opts),
-                        infix_precedence(term).is_some_and(|sub_prec| sub_prec <= prec),
+                        infix_precedence(term, opts).is_some_and(|sub_prec| sub_prec <= prec),
                     );
 
                     let prefixed_str = if let Some(rest) = term_str.strip_prefix("-")
@@ -260,7 +270,7 @@ impl Exp {
                     {
                         let sub_term_str = wrap_if(
                             &left.to_string_opts(opts),
-                            infix_precedence(left).is_some_and(|sub_prec| sub_prec <= prec),
+                            infix_precedence(left, opts).is_some_and(|sub_prec| sub_prec <= prec),
                         );
                         format!(" / {sub_term_str}")
                     } else if s == "-" && *op == AssocOp::Mul {
@@ -286,7 +296,7 @@ impl Exp {
                     let mut term_strs = terms.iter().map(|term| {
                         wrap_if(
                             &term.to_string_opts(opts),
-                            infix_precedence(term).is_some_and(|sub_prec| sub_prec <= prec),
+                            infix_precedence(term, opts).is_some_and(|sub_prec| sub_prec <= prec),
                         )
                     });
 

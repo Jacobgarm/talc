@@ -61,6 +61,8 @@ impl Exp {
     pub const ZERO: Self = Self::Real(RealNum::ZERO_INT);
     pub const ONE: Self = Self::Real(RealNum::ONE_INT);
     pub const NEGATIVE_ONE: Self = Self::Real(RealNum::NEGATIVE_ONE_INT);
+    pub const TWO: Self = Self::Real(RealNum::TWO_INT);
+    pub const ONE_HALF: Self = Self::Real(RealNum::ONE_HALF_RAT);
 
     /// No fields are Exps
     pub fn is_atomic(&self) -> bool {

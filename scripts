@@ -1,0 +1,2 @@
+! Defining the polynomial f
+f(x) := 2 + 3x - 4x²

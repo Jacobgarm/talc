@@ -86,6 +86,8 @@ fn eval_complex(num: ComplexNum, ctx: &Context) -> Exp {
 fn eval_unary(op: UnaryOp, exp: Exp, ctx: &Context) -> EvalResult<Exp> {
     match op {
         UnaryOp::Not => unary::eval_not(exp, ctx),
+        UnaryOp::Abs => unary::eval_abs(exp, ctx),
+        UnaryOp::Norm => unary::eval_norm(exp, ctx),
         UnaryOp::Factorial => unary::eval_factorial(exp, ctx),
         _ => Ok(Exp::Unary {
             op,

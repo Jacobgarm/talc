@@ -1,7 +1,7 @@
 use std::{char, cmp::Ordering, collections::HashMap, fmt::Display, str::FromStr};
 
 use itertools::Itertools;
-use lazy_regex::{regex, regex_captures, regex_is_match, regex_replace, regex_replace_all};
+use lazy_regex::{regex, regex_captures, regex_is_match, regex_replace_all};
 use malachite::{Integer, Rational, num::conversion::traits::FromSciString};
 use strum::IntoEnumIterator;
 use talc_utils::lower_superscript;
@@ -89,6 +89,7 @@ pub fn preparse(subject: &str) -> String {
         (">=", "≥"),
         ("<=", "≤"),
         ("~", "≈"),
+        ("||", "‖"),
         (" ", ""),
         ("\t", ""),
         ("\n", ""),
@@ -167,6 +168,7 @@ pub fn split_at_least_precedent(subject: &str) -> Option<(Vec<&str>, Vec<(char, 
         ('[', ']'),
         ('{', '}'),
         ('|', '|'),
+        ('‖', '‖'),
         ('⌊', '⌋'),
         ('⌈', '⌉'),
     ]);
@@ -218,6 +220,7 @@ pub fn parse_separated(subject: &str, start: usize) -> ParseResult<Vec<Vec<Exp>>
         ('[', ']'),
         ('{', '}'),
         ('|', '|'),
+        ('‖', '‖'),
         ('⌊', '⌋'),
         ('⌈', '⌉'),
     ]);

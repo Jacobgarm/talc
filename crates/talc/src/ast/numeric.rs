@@ -1,5 +1,5 @@
-use malachite::num::arithmetic::traits::Pow;
-use malachite::num::basic::traits::{NegativeOne, One, Zero};
+use malachite::num::arithmetic::traits::{Abs, Pow};
+use malachite::num::basic::traits::{NegativeOne, One, OneHalf, Two, Zero};
 use malachite::num::conversion::traits::RoundingFrom;
 use malachite::num::float::NiceFloat;
 use malachite::rounding_modes::RoundingMode;
@@ -20,6 +20,8 @@ impl RealNum {
     pub const ZERO_INT: Self = Integer(Integer::ZERO);
     pub const ONE_INT: Self = Integer(Integer::ONE);
     pub const NEGATIVE_ONE_INT: Self = Integer(Integer::NEGATIVE_ONE);
+    pub const TWO_INT: Self = Integer(Integer::TWO);
+    pub const ONE_HALF_RAT: Self = Rational(Rational::ONE_HALF);
 
     pub fn is_zero(&self) -> bool {
         match self {
@@ -131,6 +133,15 @@ impl RealNum {
 
     pub fn try_primitive_float(num: f64) -> Self {
         Self::Small(NiceFloat(num))
+    }
+
+    pub fn abs(self) -> Self {
+        match self {
+            Integer(int) => Integer(int.abs()),
+            Rational(rat) => Rational(rat.abs()),
+            Big(num) => Big(ComparableFloat(num.0.abs())),
+            Small(num) => Small(NiceFloat(num.0.abs())),
+        }
     }
 }
 

@@ -79,6 +79,8 @@ pub fn derivative(exp: &Exp, diff_exp: &Exp, ctx: &Context) -> EvalResult<Exp> {
         )),
 
         _ => {
+            println!("{exp}      {diff_exp}");
+            dbg!(exp);
             unreachable!()
         }
     }
