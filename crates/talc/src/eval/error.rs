@@ -56,6 +56,10 @@ pub enum EvalError {
     NonnumericDerivative {
         exp: Exp,
     },
+    NondifferentiableFunction {
+        name: String,
+        pos: usize,
+    },
 }
 
 pub type EvalResult<T> = Result<T, EvalError>;
@@ -158,6 +162,9 @@ impl Display for EvalError {
             }
             NonnumericDerivative { exp } => {
                 format!("cannot take derivative of non-numeric expression: {exp}")
+            }
+            NondifferentiableFunction { name, pos } => {
+                format!("cannot differentiate function {name} with respect to parameter {pos}")
             }
         };
         write!(f, "{s}")

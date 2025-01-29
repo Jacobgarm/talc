@@ -89,7 +89,7 @@ impl RealNum {
     #[must_use]
     pub fn bigify(self, prec: u64) -> Self {
         let val = match self {
-            Integer(int) => Float::from_integer_min_prec(int),
+            Integer(int) => Float::try_from(int).unwrap(),
             Rational(rat) => Float::from_rational_prec(rat, prec).0,
             Big(_) => return self,
             Small(_float) => todo!(),

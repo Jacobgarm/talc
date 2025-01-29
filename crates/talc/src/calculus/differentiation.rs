@@ -125,15 +125,17 @@ fn chain_rule(
         .iter()
         .map(|arg| derivative(arg, diff_exp, ctx))
         .try_collect()?;
-
-    let mut partials = Vec::with_capacity(args.len());
-
-    if primes.is_empty()
+    let partials = if primes.is_empty()
         && let Some(func_info) = ctx.get_func(name)
     {
-        //if !primes.is_empty() {
-        //    let exp = expand_primed_function(name, primes, ctx)?.unwrap();
-        //}
+        if func_info.params.len() != args.len() {
+            return Err(EvalError::FunctionWrongArgCount {
+                name: name.to_owned(),
+                expected: func_info.params.len(),
+                got: args.len(),
+            });
+        }
+
         let mut subs = HashMap::new();
         for (param, arg) in func_info.params.iter().zip_eq(args) {
             subs.insert(
@@ -143,34 +145,42 @@ fn chain_rule(
                 arg.clone(),
             );
         }
-
-        if let Some(deris) = &func_info.partial_deris {
-            for deri in deris {
-                partials.push(deri.substitute(&subs));
-            }
-        } else if let Some(func_exp) = &func_info.exp {
-            for param in &func_info.params {
-                let diff_exp = Exp::Var {
-                    name: param.clone(),
-                };
-                let new_exp = derivative(func_exp, &diff_exp, ctx)?;
-                partials.push(new_exp.substitute(&subs));
-            }
-        } else {
-            unreachable!("function has neither expression or partial derivatives");
-        }
+        dargs
+            .iter()
+            .enumerate()
+            .map(|(i, darg)| {
+                if darg == &Exp::ZERO {
+                    Ok(Exp::ZERO)
+                } else if let Some(known_partial) = &func_info.partial_deris[i] {
+                    Ok(known_partial.substitute(&subs))
+                } else if let Some(func_exp) = &func_info.exp {
+                    let param = &func_info.params[i];
+                    let diff_exp = Exp::Var {
+                        name: param.clone(),
+                    };
+                    let new_exp = derivative(func_exp, &diff_exp, ctx)?;
+                    Ok(new_exp.substitute(&subs))
+                } else {
+                    Err(EvalError::NondifferentiableFunction {
+                        name: name.to_owned(),
+                        pos: i + 1,
+                    })
+                }
+            })
+            .try_collect()?
     } else {
-        for i in 1..=args.len() {
-            let mut new_primes = primes.to_vec();
-            new_primes.push(i);
-            let partial = Exp::Function {
-                name: name.to_owned(),
-                primes: new_primes,
-                args: args.to_vec(),
-            };
-            partials.push(partial);
-        }
-    }
+        (1..=args.len())
+            .map(|i| {
+                let mut new_primes = primes.to_vec();
+                new_primes.push(i);
+                Exp::Function {
+                    name: name.to_owned(),
+                    primes: new_primes,
+                    args: args.to_vec(),
+                }
+            })
+            .collect_vec()
+    };
 
     let mut new_terms: Vec<Exp> = partials
         .into_iter()
